@@ -1,8 +1,8 @@
-# 🚀 [Project Title]
+# 🚀 InkBoard
 
 > COP 4331 – Large Project | University of Central Florida
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Visit%20App-blue?style=for-the-badge)](https://your-domain.com)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Visit%20App-blue?style=for-the-badge)](https://InkBoard.xyz)
 [![SwaggerHub](https://img.shields.io/badge/API%20Docs-SwaggerHub-brightgreen?style=for-the-badge)](https://app.swaggerhub.com/apis/your-api)
 [![Flutter](https://img.shields.io/badge/Mobile-Flutter-02569B?style=for-the-badge&logo=flutter)](https://flutter.dev)
 [![MERN](https://img.shields.io/badge/Stack-MERN-yellow?style=for-the-badge)](https://www.mongodb.com/mern-stack)
