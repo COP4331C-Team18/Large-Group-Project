@@ -4,7 +4,7 @@ import cors from 'cors';
 import http from 'http';
 import connectDB from './config/db';
 import authRoutes from './api/authRoutes';
-import boardRoutes from './api/boardRoutes';
+//import boardRoutes from './api/boardRoutes';
 
 dotenv.config();
 
@@ -15,7 +15,7 @@ app.use(express.json());
 connectDB();
 
 app.use('/api/auth', authRoutes);   // api/auth/login for login
-app.use('/api/boards', boardRoutes);
+// app.use('/api/boards', boardRoutes);
 
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
