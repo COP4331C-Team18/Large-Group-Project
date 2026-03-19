@@ -1,0 +1,106 @@
+/* ── Global resets & base ── */
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: 'Raleway', sans-serif;
+    overflow-x: hidden;
+}
+
+#signupDiv {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 16px;
+    padding: 36px 40px;
+    width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+#signupDiv-header {
+    text-align: center;
+    margin-bottom: 6px;
+}
+
+#signupDiv-header h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 6px;
+}
+
+#signupDiv-header p {
+    font-size: 13px;
+    color: #666;
+    margin: 0;
+}
+
+#signupDiv-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#signupDiv-fields input {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: none;
+    background: #ebebeb;
+    font-size: 14px;
+    color: #333;
+    box-sizing: border-box;
+}
+
+#signupDiv-fields input::placeholder {
+    color: #888;
+}
+
+#signupDiv-error {
+    color: red;
+    font-size: 13px;
+    min-height: 16px;
+}
+
+#signupDiv-button {
+    width: 100%;
+    padding: 13px;
+    background: #234d2e;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+#signupDiv-button:hover {
+    background: #1e3f24;
+}
+
+#signupDiv-google {
+    text-align: center;
+    font-size: 13px;
+    color: #888;
+}
+
+#googleButton {
+    width: 100%;
+    padding: 12px;
+    background: #ebebeb;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+#googleButton:hover {
+    background: #ddd;
+}
