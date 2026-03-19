@@ -5,6 +5,10 @@ export interface UserDocument extends Document {
   username: string;
   email: string;
   password: string;
+  verified: boolean;
+  verificationCode: string | null;
+  verificationCodeExpires: Date | null;
+  provider: "inkboard" | "google";
   comparePassword(candidate: string): Promise<boolean>;
 }
 
@@ -28,14 +32,36 @@ const userSchema = new Schema<UserDocument>(
       required: true,
       trim: true,
     },
+    
+    // for email verification
+    verified: {
+      type: Boolean,
+      default: false,
+    },
+    verificationCode: { 
+      type: String, 
+      default: null 
+    },
+    verificationCodeExpires: {
+      type: Date,
+      default: null,
+    },
+
+    // to hopefully support google and regular account login
+    provider: {
+      type: String,
+      enum: ["inkboard", "google"],
+      default: "inkboard",
+    },
   },
   { timestamps: true }
 );
 
-// Hash password before saving
+// Hash password before saving for regular inkboard authentication
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
 
+  if (this.provider !== "inkboard") return; // Only hash for inkboard auth
   this.password = await bcrypt.hash(this.password, 10);
 });
 

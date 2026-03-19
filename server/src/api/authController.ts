@@ -5,6 +5,12 @@ import jwt from "jsonwebtoken";
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
 const MIN_PASSWORD_LENGTH = 10; // Define minimum password length
 
+// Helper functions
+// generating 6 digit verification code
+function generateVerificationCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 
 /* 
  Sample payload for login endpoint:
@@ -31,6 +37,11 @@ export async function login(req: Request, res: Response) {
 
     if (!user) {
       return res.status(401).json({ error: "Invalid login or password" });
+    }
+
+    // Check if email is verfied for users
+    if (user.provider === "inkboard" && !user.verified) {
+      return res.status(403).json({ error: "Email not verified." });
     }
 
     // Compare password
@@ -63,7 +74,7 @@ export async function login(req: Request, res: Response) {
 
 
 /*
-  Sample payload for createaccount endpoint:
+  Sample payload for signup endpoint:
   {
     "username": "user1",
     "email": "user1@example.com",
@@ -71,7 +82,7 @@ export async function login(req: Request, res: Response) {
   }
 */
 
-// POST /api/auth/createaccount
+// POST /api/auth/signup
 export async function createaccount(req: Request, res: Response) {
   const { username, email, password } = req.body;
 
@@ -101,18 +112,82 @@ export async function createaccount(req: Request, res: Response) {
       return res.status(409).json({ error: "Username or email already exists" });
     }
 
-    // Create user (password hashing happens in the model)
-    const user = await User.create({ username, email, password });
+    
 
-    // Create JWT
+    // generating a 6 digit verification code
+    const verificationCode = generateVerificationCode();
+
+    // Create user 
+    const user = await User.create({ 
+      username, 
+      email, 
+      password,
+      provider: "inkboard",
+      verified: false, // must call verify-email endpoint to verify email
+      verificationCode,
+      verificationCodeExpires: new Date(Date.now() + (10 * 60 * 1000)), // code expires in 10 minutes
+    });
+
+
+    return res.status(201).json({
+      message: "Verification code sent to email.",
+      email: user.email,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: "Server error" });
+  }
+}
+
+
+
+// POST /api/auth/verify-email
+export async function verifyEmail(req: Request, res: Response) {  
+  const { email, verificationCode } = req.body;
+
+  // Basic field validation
+  if(!email || !verificationCode) {
+    return res.status(400).json({ error: "Missing email or verification code" });
+  } 
+
+  try {
+    const user = await User.findOne({ email });
+
+    if(!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // check verification status of user
+    if(user.verified) {
+      return res.status(400).json({ error: "Email already verified" });
+    }
+
+    // Check if verification code matches
+    if(user.verificationCode !== verificationCode) {
+      return res.status(400).json({ error: "Invalid verification code" });
+    }
+
+    // Check if code is expired
+    if(!user.verificationCodeExpires || user.verificationCodeExpires < new Date()) {
+      return res.status(400).json({ error: "Verification code expired" });
+    }
+
+    // Email is verified
+    // updating user docs
+    user.verified = true;
+    user.verificationCode = null;
+    user.verificationCodeExpires = null;
+    await user.save();
+
+    // Creating JWT (expires in 7 days)
     const token = jwt.sign(
       { id: user._id, username: user.username },
       JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    return res.status(201).json({
-      message: "Account created successfully",
+    // Return payload with token and user info
+    return res.status(200).json({
+      message: "Email verified successfully",
       token,
       user: {
         id: user._id,
@@ -120,7 +195,9 @@ export async function createaccount(req: Request, res: Response) {
         email: user.email,
       },
     });
+
   } catch (err) {
     return res.status(500).json({ error: "Server error" });
   }
+
 }
