@@ -62,7 +62,13 @@ userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
 
   if (this.provider !== "inkboard") return; // Only hash for inkboard auth
-  this.password = await bcrypt.hash(this.password, 10);
+
+  let saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS );
+  if(!saltRounds) {
+    saltRounds = 10; // default to 10 if not set
+  }
+
+  this.password = await bcrypt.hash(this.password, saltRounds);
 });
 
 

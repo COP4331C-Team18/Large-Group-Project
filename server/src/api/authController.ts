@@ -1,8 +1,15 @@
 import { Request, Response } from "express";
 import User from "../models/User";
 import jwt from "jsonwebtoken";
+import nodemailer from "nodemailer";
+import { OAuth2Client } from "google-auth-library";
 
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
+
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET is not configured");
+};
+const JWT_SECRET = process.env.JWT_SECRET;
+
 const MIN_PASSWORD_LENGTH = 10; // Define minimum password length
 
 // Helper functions
@@ -11,6 +18,36 @@ function generateVerificationCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+// sending verification code to email using nodemailer
+async function sendVerificationEmail(email: string, code: string, expirationMins: number) {
+  const emailUser = process.env.EMAIL_USER;
+  const emailPass = process.env.EMAIL_PASS;
+
+  if (!emailUser || !emailPass) {
+    throw new Error("EMAIL_USER or EMAIL_PASS is not configured");
+  }
+
+  // Create transporter using environment variables for email credentials
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: emailUser,
+        pass: emailPass,
+      },
+    });
+
+    await transporter.sendMail({
+      from: `Inkboard <${emailUser}>`,
+      to: email,
+      subject: "Verify your Inkboard account",
+      text: `Your Inkboard verification code is: ${code}. Expires in ${expirationMins} minutes.`,
+    });
+  } catch (error) {
+    console.error("Error sending verification email:", error);
+    throw new Error("Failed to send verification email");
+  }
+}
 
 /* 
  Sample payload for login endpoint:
@@ -83,8 +120,9 @@ export async function login(req: Request, res: Response) {
 */
 
 // POST /api/auth/signup
-export async function createaccount(req: Request, res: Response) {
+export async function signup(req: Request, res: Response) {
   const { username, email, password } = req.body;
+  const verificationExpirationMins = 10;
 
   // Basic field validation
   if (!username || !email || !password) {
@@ -103,7 +141,7 @@ export async function createaccount(req: Request, res: Response) {
   }
 
   try {
-    // Check duplicates
+    // Check for duplicates
     const alreadyExists = await User.findOne({
       $or: [{ username }, { email }],
     });
@@ -125,8 +163,16 @@ export async function createaccount(req: Request, res: Response) {
       provider: "inkboard",
       verified: false, // must call verify-email endpoint to verify email
       verificationCode,
-      verificationCodeExpires: new Date(Date.now() + (10 * 60 * 1000)), // code expires in 10 minutes
+      verificationCodeExpires: new Date(Date.now() + verificationExpirationMins * 60 * 1000),
     });
+
+    // Send verification email using nodemailer
+    try {
+      await sendVerificationEmail(user.email, verificationCode, verificationExpirationMins);
+    } catch (emailErr) {
+      await User.deleteOne({ _id: user._id }); // delete user if email sending fails
+      return res.status(500).json({ error: "Unable to send verification email. Please try again." });
+    }
 
 
     return res.status(201).json({
@@ -137,6 +183,8 @@ export async function createaccount(req: Request, res: Response) {
     return res.status(500).json({ error: "Server error" });
   }
 }
+
+
 
 
 
@@ -200,4 +248,132 @@ export async function verifyEmail(req: Request, res: Response) {
     return res.status(500).json({ error: "Server error" });
   }
 
+}
+
+// POST /api/auth/google
+export async function googleOAuth(req: Request, res: Response) {
+  const { idToken } = req.body;
+
+  // Basic field validation
+  if (!idToken) {
+    return res.status(400).json({ error: "Missing ID token" });
+  }
+
+  try {
+    const googleClientId = process.env.GOOGLE_CLIENT_ID;
+
+    // Check if Google Client ID is configured
+    if (!googleClientId) {
+      return res.status(500).json({ error: "Google configuration is missing" });
+    }
+
+    // Creating OAuth2 client
+    const client = new OAuth2Client(googleClientId);
+
+    // Verifying the ID token with google
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: googleClientId,
+    });
+
+    // Extracting user info from token payload
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email || !payload.name) {
+      return res.status(400).json({ error: "Invalid token payload" });
+    }
+
+    const email = payload.email;
+    const name = payload.name;
+    const googleId = payload.sub;
+
+    // Find existing user or create new one
+    let user = await User.findOne({ email });
+
+    if (user) {
+      // User exists - verify they used Google to login
+      if (user.provider !== "google") {
+        return res.status(409).json({ error: "Email already registered with a different provider" });
+      }
+    } else {
+      // Create new Google user 
+      user = await User.create({
+        username: name.replace(/\s+/g, "").toLowerCase() + "_" + googleId.slice(0, 8),
+        email,
+        password: "", // Google users don't have password
+        provider: "google",
+        verified: true, // verified by Google
+      });
+    }
+
+    // Create JWT (expires in 7 days)
+    const token = jwt.sign(
+      { id: user._id, username: user.username },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    // Return payload for successful login
+    return res.status(200).json({
+      message: "Google login successful",
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+      },
+    });
+  } catch (err) {
+    console.error("Google login error:", err);
+
+    // inadded error handling for invalid token
+    if (err.message?.includes("Invalid token")) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    return res.status(500).json({ error: "Server error" });
+  }
+}
+
+
+// POST /api/auth/resend-verification
+export async function resendVerification(req: Request, res: Response) {
+  const { email } = req.body;
+  
+  // Basic field validation
+  if (!email) {
+    return res.status(400).json({ error: "Missing email" });
+  }
+
+  try {
+    const user = await User.findOne({ email });
+
+    // Check if user exists
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Check if user is already verified
+    if (user.verified) {
+      return res.status(400).json({ error: "Email already verified" });
+    }
+
+    // Generating a new verification code
+    const verificationExpirationMins = 10;
+    const verificationCode = generateVerificationCode();
+
+    user.verificationCode = verificationCode;
+    user.verificationCodeExpires = new Date(Date.now() + verificationExpirationMins * 60 * 1000); // code expires in 10 mins
+    await user.save();
+
+    // Send verification email
+    await sendVerificationEmail(user.email, verificationCode, verificationExpirationMins);
+
+    return res.status(200).json({
+      message: "Verification code resent to email.",
+      email: user.email,
+    });
+
+  } catch (err) {
+    console.error("Error in resend verification:", err);
+    return res.status(500).json({ error: "Server error" });
+  }   
 }
