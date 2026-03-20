@@ -1,19 +1,19 @@
-/* ── Global resets & base ── */
-html {
-    scroll-behavior: smooth;
-}
-
-body {
-    font-family: 'Raleway', sans-serif;
-    overflow-x: hidden;
+#signupPage {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: #F5F2EC;
 }
 
 #signupDiv {
     background: white;
-    border: 1px solid #e0e0e0;
+    border: 2px solid #d0c5ad;
     border-radius: 16px;
     padding: 36px 40px;
-    width: 420px;
+    width: 90%;
+    max-width: 1000px;
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -41,7 +41,7 @@ body {
 #signupDiv-fields {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 25px;
 }
 
 #signupDiv-fields input {
@@ -68,8 +68,8 @@ body {
 #signupDiv-button {
     width: 100%;
     padding: 13px;
-    background: #234d2e;
-    color: white;
+    background: #4a5a3a;
+    color: #e4ddd0;
     border: none;
     border-radius: 8px;
     font-size: 15px;
@@ -78,7 +78,7 @@ body {
 }
 
 #signupDiv-button:hover {
-    background: #1e3f24;
+    background: #2e3d28;
 }
 
 #signupDiv-google {

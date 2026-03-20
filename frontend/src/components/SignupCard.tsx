@@ -88,10 +88,10 @@ export default function Signup() {
             </div>
 
             <div id="signupDiv-fields">
-                <input type="email" id="signupEmail" placeholder="Email" onChange={handleSetSignupEmail} /><br />
-                <input type="text" id="signupName" placeholder="Username" onChange={handleSetSignupName} /><br />
-                <input type="password" id="signupPassword" placeholder="Password" onChange={handleSetSignupPassword} /><br />
-                <input type="password" id="signupConfirmPassword" placeholder="Confirm Password" onChange={handleSetSignupConfirmPassword} /><br />
+                <input type="email" id="signupEmail" placeholder="Email" onChange={handleSetSignupEmail} />
+                <input type="text" id="signupName" placeholder="Username" onChange={handleSetSignupName} />
+                <input type="password" id="signupPassword" placeholder="Password" onChange={handleSetSignupPassword} />
+                <input type="password" id="signupConfirmPassword" placeholder="Confirm Password" onChange={handleSetSignupConfirmPassword} />
             </div>
 
             <span id="signupDiv-error">{message}</span>
