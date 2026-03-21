@@ -1,13 +1,12 @@
 import { Request, Response } from "express";
 import User from "../models/User";
-//import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import { OAuth2Client } from "google-auth-library";
 import { signAccessToken, verifyAccessToken } from "../utils/jwtUtils";
 import { HTTPStatusCodes } from "../utils/statusCodes";
 
 
-const MIN_PASSWORD_LENGTH = 10; // Define minimum password length
+const MIN_PASSWORD_LENGTH = 10; // Define minimum password length (can maybe later add some more checks for the password once we decide on it)
 const JWT_EXPIRATION = "1h"; // token valid for 1 hour
 
 // Helper functions
@@ -47,13 +46,29 @@ async function sendVerificationEmail(email: string, code: string, expirationMins
   }
 }
 
+
+
 /* 
- Sample payload for login endpoint:
- {
-   "login": "user1", // can be either username or email
-   "password": "password123"
- }
+ Sample request payload for login endpoint:
+  "login": "user1", // can be either username or email
+  "password": "password123"
 */
+
+/*
+  Successful login response payload:
+    "message": "Login successful",
+    "token": "<JWT_TOKEN>",
+    "user":
+      "id": "<USER_ID>",
+      "username": "<USERNAME>",
+      "email": "<EMAIL>"
+*/
+
+/* 
+  Sample error response payload:
+    "error": <Error>
+*/
+
 
 // POST /api/auth/login
 export async function login(req: Request, res: Response) {
@@ -92,12 +107,13 @@ export async function login(req: Request, res: Response) {
       return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: "Invalid login or password" });
     }
 
-    // Create JWT (expires in 7 days)
+    // Create JWT
     const token = signAccessToken(
       { id: user._id, username: user.username },
       JWT_EXPIRATION
     );
 
+    // success return payload
     return res.status(HTTPStatusCodes.OK).json({
       message: "Login successful",
       token,
@@ -114,13 +130,23 @@ export async function login(req: Request, res: Response) {
 
 
 
-/*
-  Sample payload for signup endpoint:
-  {
+
+/* 
+  Sample request payload for signup endpoint:
     "username": "user1",
     "email": "user1@example.com",
     "password": "password123"
-  }
+*/
+
+/*
+  Successful signup response payload:
+    "message": "Verification code sent to email.",
+    "email": "<EMAIL>"
+*/
+
+/*
+  Sample error response payload:
+    "error": <Error>
 */
 
 // POST /api/auth/signup
@@ -139,7 +165,7 @@ export async function signup(req: Request, res: Response) {
     return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Invalid email format" });
   }
 
-  // Password length check
+  // Password length check ( can later add more checks for password )
   if (password.length < MIN_PASSWORD_LENGTH) {
     return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters long` });
   }
@@ -191,6 +217,27 @@ export async function signup(req: Request, res: Response) {
 
 
 
+
+/*
+  Sample request payload for verify-email endpoint:
+    "email": "<EMAIL>",
+    "verificationCode": <code received in email>
+*/
+
+/*
+  Successful email verification response payload:
+    "message": "Email verified successfully",
+    "token": "<JWT_TOKEN>",
+    "user":
+      "id": "<USER_ID>",
+      "username": "<USERNAME>",
+      "email": "<EMAIL>"
+*/
+
+/*
+  Sample error response payload:
+    "error": <Error>
+*/
 
 // POST /api/auth/verify-email
 export async function verifyEmail(req: Request, res: Response) {  
@@ -252,6 +299,31 @@ export async function verifyEmail(req: Request, res: Response) {
   }
 
 }
+
+
+
+
+
+
+/* 
+  Sample request payload for google OAuth endpoint:
+    "idToken": "<GOOGLE_ID_TOKEN>"
+*/
+
+/*
+  Successful google OAuth response payload:
+    "message": "Google login successful",
+    "token": "<JWT_TOKEN>",
+    "user":
+      "id": "<USER_ID>",
+      "username": "<USERNAME>",
+      "email": "<EMAIL>"
+*/
+
+/*
+  Sample error response payload:
+    "error": <Error>
+*/
 
 // POST /api/auth/google
 export async function googleOAuth(req: Request, res: Response) {
@@ -334,6 +406,24 @@ export async function googleOAuth(req: Request, res: Response) {
     return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: "Server error" });
   }
 }
+
+
+
+/* 
+  Sample request payload for resend verification endpoint:
+    "email": "<EMAIL>"
+*/
+
+/*
+  Successful resend verification response payload:
+    "message": "Verification code resent to email.",
+    "email": "<EMAIL>"
+*/
+
+/*
+  Sample error response payload:
+    "error": <Error>
+*/
 
 
 // POST /api/auth/resend-verification
