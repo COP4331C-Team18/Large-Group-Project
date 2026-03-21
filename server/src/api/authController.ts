@@ -1,16 +1,14 @@
 import { Request, Response } from "express";
 import User from "../models/User";
-import jwt from "jsonwebtoken";
+//import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import { OAuth2Client } from "google-auth-library";
+import { signAccessToken, verifyAccessToken } from "../utils/jwtUtils";
+import { HTTPStatusCodes } from "../utils/statusCodes";
 
-
-if (!process.env.JWT_SECRET) {
-  throw new Error("JWT_SECRET is not configured");
-};
-const JWT_SECRET = process.env.JWT_SECRET;
 
 const MIN_PASSWORD_LENGTH = 10; // Define minimum password length
+const JWT_EXPIRATION = "1h"; // token valid for 1 hour
 
 // Helper functions
 // generating 6 digit verification code
@@ -63,7 +61,7 @@ export async function login(req: Request, res: Response) {
 
   // Basic json field validation
   if (!login || !password) {
-    return res.status(400).json({ error: "Missing login or password" });
+    return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Missing login or password" });
   }
 
   try {
@@ -73,28 +71,34 @@ export async function login(req: Request, res: Response) {
     });
 
     if (!user) {
-      return res.status(401).json({ error: "Invalid login or password" });
+      return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: "Invalid login or password" });
     }
 
     // Check if email is verfied for users
     if (user.provider === "inkboard" && !user.verified) {
-      return res.status(403).json({ error: "Email not verified." });
+      return res.status(HTTPStatusCodes.FORBIDDEN).json({ error: "Email not verified." });
+    }
+
+    // Check if the email is already registered with google  as a provider
+    if (user.provider === "google") {
+      return res.status(HTTPStatusCodes.BAD_REQUEST).json({
+        error: "This email is registered with Google. Please sign in with Google."
+      });
     }
 
     // Compare password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res.status(401).json({ error: "Invalid login or password" });
+      return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: "Invalid login or password" });
     }
 
     // Create JWT (expires in 7 days)
-    const token = jwt.sign(
+    const token = signAccessToken(
       { id: user._id, username: user.username },
-      JWT_SECRET,
-      { expiresIn: "7d" }
+      JWT_EXPIRATION
     );
 
-    return res.status(200).json({
+    return res.status(HTTPStatusCodes.OK).json({
       message: "Login successful",
       token,
       user: {
@@ -104,7 +108,7 @@ export async function login(req: Request, res: Response) {
       },
     });
   } catch (err) {
-    return res.status(500).json({ error: "Server error" });
+    return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: "Server error" });
   }
 }
 
@@ -126,18 +130,18 @@ export async function signup(req: Request, res: Response) {
 
   // Basic field validation
   if (!username || !email || !password) {
-    return res.status(400).json({ error: "Missing required fields" });
+    return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Missing required fields" });
   }
 
   // Email format check with regex
   const emailRegex = /^\S+@\S+\.\S+$/;
   if (!emailRegex.test(email)) {
-    return res.status(400).json({ error: "Invalid email format" });
+    return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Invalid email format" });
   }
 
   // Password length check
   if (password.length < MIN_PASSWORD_LENGTH) {
-    return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters long` });
+    return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters long` });
   }
 
   try {
@@ -147,7 +151,7 @@ export async function signup(req: Request, res: Response) {
     });
 
     if (alreadyExists) {
-      return res.status(409).json({ error: "Username or email already exists" });
+      return res.status(HTTPStatusCodes.CONFLICT).json({ error: "Username or email already exists" });
     }
 
     
@@ -171,16 +175,16 @@ export async function signup(req: Request, res: Response) {
       await sendVerificationEmail(user.email, verificationCode, verificationExpirationMins);
     } catch (emailErr) {
       await User.deleteOne({ _id: user._id }); // delete user if email sending fails
-      return res.status(500).json({ error: "Unable to send verification email. Please try again." });
+      return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: "Unable to send verification email. Please try again." });
     }
 
 
-    return res.status(201).json({
+    return res.status(HTTPStatusCodes.CREATED).json({
       message: "Verification code sent to email.",
       email: user.email,
     });
   } catch (err) {
-    return res.status(500).json({ error: "Server error" });
+    return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: "Server error" });
   }
 }
 
@@ -194,29 +198,29 @@ export async function verifyEmail(req: Request, res: Response) {
 
   // Basic field validation
   if(!email || !verificationCode) {
-    return res.status(400).json({ error: "Missing email or verification code" });
+    return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Missing email or verification code" });
   } 
 
   try {
     const user = await User.findOne({ email });
 
     if(!user) {
-      return res.status(404).json({ error: "User not found" });
+      return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: "User not found" });
     }
 
     // check verification status of user
     if(user.verified) {
-      return res.status(400).json({ error: "Email already verified" });
+      return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Email already verified" });
     }
 
     // Check if verification code matches
     if(user.verificationCode !== verificationCode) {
-      return res.status(400).json({ error: "Invalid verification code" });
+      return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Invalid verification code" });
     }
 
     // Check if code is expired
     if(!user.verificationCodeExpires || user.verificationCodeExpires < new Date()) {
-      return res.status(400).json({ error: "Verification code expired" });
+      return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Verification code expired" });
     }
 
     // Email is verified
@@ -227,14 +231,13 @@ export async function verifyEmail(req: Request, res: Response) {
     await user.save();
 
     // Creating JWT (expires in 7 days)
-    const token = jwt.sign(
+    const token = signAccessToken(
       { id: user._id, username: user.username },
-      JWT_SECRET,
-      { expiresIn: "7d" }
+      JWT_EXPIRATION
     );
 
     // Return payload with token and user info
-    return res.status(200).json({
+    return res.status(HTTPStatusCodes.OK).json({
       message: "Email verified successfully",
       token,
       user: {
@@ -245,7 +248,7 @@ export async function verifyEmail(req: Request, res: Response) {
     });
 
   } catch (err) {
-    return res.status(500).json({ error: "Server error" });
+    return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: "Server error" });
   }
 
 }
@@ -256,7 +259,7 @@ export async function googleOAuth(req: Request, res: Response) {
 
   // Basic field validation
   if (!idToken) {
-    return res.status(400).json({ error: "Missing ID token" });
+    return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Missing ID token" });
   }
 
   try {
@@ -264,7 +267,7 @@ export async function googleOAuth(req: Request, res: Response) {
 
     // Check if Google Client ID is configured
     if (!googleClientId) {
-      return res.status(500).json({ error: "Google configuration is missing" });
+      return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: "Google configuration is missing" });
     }
 
     // Creating OAuth2 client
@@ -279,7 +282,7 @@ export async function googleOAuth(req: Request, res: Response) {
     // Extracting user info from token payload
     const payload = ticket.getPayload();
     if (!payload || !payload.email || !payload.name) {
-      return res.status(400).json({ error: "Invalid token payload" });
+      return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Invalid token payload" });
     }
 
     const email = payload.email;
@@ -292,7 +295,7 @@ export async function googleOAuth(req: Request, res: Response) {
     if (user) {
       // User exists - verify they used Google to login
       if (user.provider !== "google") {
-        return res.status(409).json({ error: "Email already registered with a different provider" });
+        return res.status(HTTPStatusCodes.CONFLICT).json({ error: "Email already registered with a different provider" });
       }
     } else {
       // Create new Google user 
@@ -306,14 +309,13 @@ export async function googleOAuth(req: Request, res: Response) {
     }
 
     // Create JWT (expires in 7 days)
-    const token = jwt.sign(
+    const token = signAccessToken(
       { id: user._id, username: user.username },
-      JWT_SECRET,
-      { expiresIn: "7d" }
+      JWT_EXPIRATION
     );
 
     // Return payload for successful login
-    return res.status(200).json({
+    return res.status(HTTPStatusCodes.OK).json({
       message: "Google login successful",
       token,
       user: {
@@ -327,9 +329,9 @@ export async function googleOAuth(req: Request, res: Response) {
 
     // inadded error handling for invalid token
     if (err.message?.includes("Invalid token")) {
-      return res.status(401).json({ error: "Invalid or expired token" });
+      return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: "Invalid or expired token" });
     }
-    return res.status(500).json({ error: "Server error" });
+    return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: "Server error" });
   }
 }
 
@@ -340,7 +342,7 @@ export async function resendVerification(req: Request, res: Response) {
   
   // Basic field validation
   if (!email) {
-    return res.status(400).json({ error: "Missing email" });
+    return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Missing email" });
   }
 
   try {
@@ -348,12 +350,12 @@ export async function resendVerification(req: Request, res: Response) {
 
     // Check if user exists
     if (!user) {
-      return res.status(404).json({ error: "User not found" });
+      return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: "User not found" });
     }
 
     // Check if user is already verified
     if (user.verified) {
-      return res.status(400).json({ error: "Email already verified" });
+      return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Email already verified" });
     }
 
     // Generating a new verification code
@@ -367,13 +369,13 @@ export async function resendVerification(req: Request, res: Response) {
     // Send verification email
     await sendVerificationEmail(user.email, verificationCode, verificationExpirationMins);
 
-    return res.status(200).json({
+    return res.status(HTTPStatusCodes.OK).json({
       message: "Verification code resent to email.",
       email: user.email,
     });
 
   } catch (err) {
     console.error("Error in resend verification:", err);
-    return res.status(500).json({ error: "Server error" });
+    return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: "Server error" });
   }   
 }
