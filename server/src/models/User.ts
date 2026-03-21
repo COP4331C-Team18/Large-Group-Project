@@ -27,9 +27,14 @@ const userSchema = new Schema<UserDocument>(
       lowercase: true,
       trim: true,
     },
+
+    // password is only required for regular inkboard authentication
+    // not required for google auth
     password: {
       type: String,
-      required: true,
+      required: function (this: UserDocument) {
+        return this.provider === "inkboard";
+      },
       trim: true,
     },
     
