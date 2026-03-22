@@ -1,0 +1,276 @@
+#signupPage {
+    display: flex;
+    justify-content: center;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+    background: #F5F2EC;
+}
+
+#signupContainer {
+    position: relative;
+    width: 90%;
+    max-width: 1000px;
+}
+
+#signupDiv,
+#verificationDiv {
+    background: white;
+    border: 2px solid #d0c5ad;
+    border-radius: 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    text-align: center;
+    box-sizing: border-box;
+    padding: clamp(24px, 4vw, 40px);
+}
+
+/* --- Signup Card --- */
+#signupDiv {
+    padding: 36px 40px;
+    position: realtive;
+    transition: filter 0.3s ease, opacity 0.3s ease;
+}
+
+#signupDiv.is-hidden-behind {
+    filter: blur(1.5px);
+    opacity: 0.45;
+    pointer-events: none;
+    user-select: none;
+}
+
+#signupDiv-header {
+    text-align: center;
+    margin-bottom: 6px;
+}
+
+#signupDiv-header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 6px;
+}
+
+#signupDiv-header p {
+    font-size: 16px;
+    color: #666;
+    margin: 0;
+}
+
+/* --- Signup Form --- */
+#signupDiv-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+#signupDiv-fields input {
+    width: 100%;
+    padding: 20px 16px;
+    border-radius: 10px;
+    border: none;
+    background: #ebebeb;
+    font-size: 16px;
+    color: #333;
+    box-sizing: border-box;
+}
+
+#signupDiv-fields input::placeholder {
+    color: #888;
+}
+
+#signupDiv-error {
+    color: red;
+    font-size: 14px;
+    min-height: 16px;
+}
+
+#signupDiv-button {
+    width: 100%;
+    padding: 20px;
+    background: #4a5a3a;
+    color: #e4ddd0;
+    border: none;
+    border-radius: 10px;
+    font-size: 18px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+#signupDiv-button:hover {
+    background: #2e3d28;
+}
+
+/* --- Google Signup --- */
+#signupDiv-google {
+    text-align: center;
+    font-size: 13px;
+    color: #888;
+}
+
+#googleButton {
+    width: 100%;
+    padding: 20px;
+    background: #ebebeb;
+    border: none;
+    border-radius: 10px;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+#googleButton:hover {
+    background: #ddd;
+}
+
+
+/* --- Verification Card --- */
+#verificationDiv {
+    padding: 36px 40px;
+    width: 100%;
+    max-width: 1000px;
+    position: absolute;
+    top: 30%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-50%);
+    z-index: 10;
+    text-align: center;
+    gap: 20px;
+    animation: slideDown 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-16px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+#verificationDiv-header p {
+    font-size: 16px;
+    color: #666;
+    margin: 0 0 4px;
+}
+
+#verificationDiv-header strong {
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+}
+
+#verification-inputs {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin: 4px 0;
+}
+
+.verification-digit {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    border: 2px solid #d0c5ad;
+    text-align: center;
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+    caret-color: transparent;
+    outline: none;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.verification-digit:focus {
+    background: #f0f0f0;
+    box-shadow: 0 0 0 2px #d0c5ad;
+}
+
+.verification-digit.filled {
+    background: #4a5a3a;
+    color: #e4ddd0;
+    border-color: #4a5a3a;
+}
+
+.verification-digit.filled:focus {
+    background: #4a5a3a;
+    box-shadow: 0 0 0 2px #4a5a3a;
+}
+
+#verification-error {
+    color: red;
+    font-size: 14px;
+    min-height: 20px;
+}
+
+#verification-resend {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 15px;
+    gap: 8px;
+    justify-content: center;
+    font-size: 14px;
+    color: #888;
+    flex-wrap: wrap;
+}
+
+#verification-resend-row {
+    flex-wrap: wrap;
+}
+
+#resendButton {
+    background: #4a5a3a;
+    color: #e4ddd0;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 5px 30px;
+    border-radius: 10px;
+    transition: background 0.15s ease;
+}
+
+#resendButton:hover {
+    background: #2e3d28;
+}
+
+#verification-resendMsg {
+    color: green;
+    font-size: 14px;
+    display: flex;
+    margin-top: 4px;
+}
+
+#verification-divider {
+    border-top: 1px solid #d0c5ad;
+    margin-top: 30px;
+}
+
+#verification-return {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: #888;
+    margin-bottom: -20px;
+    gap: 10px;
+}
+
+#returnButton {
+    color: #f4f5f4;
+    background: #666;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 5px 30px;
+    border-radius: 10px;
+}
+
+#returnButton:hover {
+    background-color: #555;
+}
