@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import InkcapLogo from '@/components/common/InkcapLogo';
 
 function GitHubIcon() {
@@ -9,6 +10,8 @@ function GitHubIcon() {
 }
 
 export default function Footer() {
+  const navigate = useNavigate();
+
   return (
     <footer
       className="
@@ -29,7 +32,7 @@ export default function Footer() {
       {/* Links */}
       <div className="flex gap-7">
         <button
-          onClick={() => {}}
+          onClick={() => navigate('/login')}
           className="
             flex items-center gap-[0.35rem]
             font-sans text-[0.72rem] font-medium tracking-[0.06em] uppercase
@@ -40,7 +43,7 @@ export default function Footer() {
           Log in
         </button>
         <button
-          onClick={() => {}}
+          onClick={() => navigate('/signup')}
           className="
             flex items-center gap-[0.35rem]
             font-sans text-[0.72rem] font-medium tracking-[0.06em] uppercase
@@ -51,7 +54,7 @@ export default function Footer() {
           Sign up
         </button>
         <a
-          href="https://github.com/COP4331C-Team18/Large-Group-Project"
+          href="https://github.com"
           target="_blank"
           rel="noopener noreferrer"
           className="
