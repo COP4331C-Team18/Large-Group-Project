@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import InkcapLogo from '@/components/common/InkcapLogo';
 
 // GitHub SVG icon
@@ -10,6 +11,7 @@ function GitHubIcon() {
 }
 
 export default function Navbar() {
+  const navigate = useNavigate();
   return (
     <nav
       className="
@@ -37,7 +39,7 @@ export default function Navbar() {
       <div className="flex items-center gap-2">
         {/* GitHub */}
         <a
-          href="https://github.com/COP4331C-Team18/Large-Group-Project"
+          href="https://github.com"
           target="_blank"
           rel="noopener noreferrer"
           className="
@@ -54,7 +56,7 @@ export default function Navbar() {
 
         {/* Log in */}
         <button
-          onClick={() => {}}
+          onClick={() => navigate('/login')}
           className="
             flex items-center gap-[0.4rem]
             font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase
@@ -69,7 +71,7 @@ export default function Navbar() {
 
         {/* Create account */}
         <button
-          onClick={() => {}}
+          onClick={() => navigate('/signup')}
           className="
             flex items-center gap-[0.4rem]
             font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase
