@@ -46,6 +46,13 @@ export default function Signup() {
             return;
         }
 
+        // ENFORCING THE SAME PASSWORD CHECK ON THE FRONTEND AS THE BACKEND TO PREVENT DUMB ERRORS
+        if (signupPassword.length < 10) {
+            setMessage('Password must be at least 10 characters long');
+            return;
+        }
+
+
         /* 
             Temporarily show verification card without API call for testing
             !!! Reminder to remove this after merging !!!
