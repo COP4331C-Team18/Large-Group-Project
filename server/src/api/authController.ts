@@ -175,9 +175,46 @@ export async function signup(req: Request, res: Response) {
     // Check for duplicate email
     const emailExists = await User.findOne({ email });
     if (emailExists) {
+      // Case 1: Email already registered with google provider 
+      // BLOCK signup -> tell the user to login with google
       if (emailExists.provider === "google") {
-        return res.status(HTTPStatusCodes.CONFLICT).json({ error: "Email already registered with Google. Please sign in with Google." });
+        return res.status(HTTPStatusCodes.CONFLICT).json({ 
+          error: "Email already registered with Google. Please sign in with Google." 
+        });
       }
+
+      // Case 2: Email registered with inkboard provider, but is unverified
+      // DO NOT BLOCK signup in this case, simply resend verification email and show message to check email for verification code
+      if(!emailExists.verified) {
+        const verificationCode = generateVerificationCode();
+        const verificationExpirationMins = 10;
+
+        // updating verification code and signup timestamp for existing, unverified user
+        emailExists.verificationCode = verificationCode;
+        emailExists.verificationCodeExpires = new Date(Date.now() + verificationExpirationMins * 60 * 1000);
+        await emailExists.save();
+
+        // Send verification email
+        try {
+          await sendVerificationEmail(
+            emailExists.email, 
+            verificationCode, 
+            verificationExpirationMins
+          );
+        } catch (emailErr) {
+          return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ 
+            error: "Unable to send verification email. Please try again." 
+          });
+        }
+
+        return res.status(HTTPStatusCodes.OK).json({
+          message: "Verification code resent to email. Please check your email.",
+          email: emailExists.email,
+        });
+      }
+      
+      // Case 3: Email registered with inkboard provider and is already verified
+      // BLOCK signup and tell user that email is already registered
       return res.status(HTTPStatusCodes.CONFLICT).json({ error: "Email already registered." });
     }
 
