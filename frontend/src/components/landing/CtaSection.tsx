@@ -33,13 +33,7 @@ export default function CtaSection() {
           {/* Primary CTA */}
           <button
             onClick={() => {}}
-            className="
-              flex items-center gap-2
-              font-sans text-[0.78rem] font-semibold tracking-[0.1em] uppercase
-              bg-moss text-stem-light
-              px-9 py-[0.875rem] rounded-[3px] border-none
-              transition-colors duration-200 hover:bg-forest
-            "
+            className="btn btn-primary font-sans text-[0.78rem] tracking-[0.1em] uppercase rounded-[3px] px-9"
           >
             Create free account
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -52,15 +46,7 @@ export default function CtaSection() {
             href="https://github.com/COP4331C-Team18/Large-Group-Project"
             target="_blank"
             rel="noopener noreferrer"
-            className="
-              flex items-center gap-2
-              font-sans text-[0.78rem] font-medium tracking-[0.08em] uppercase
-              text-soil bg-transparent
-              px-9 py-[0.875rem] rounded-[3px]
-              border border-[rgba(74,90,58,0.28)]
-              transition-colors duration-200
-              hover:bg-[rgba(74,90,58,0.07)] hover:text-ink hover:border-moss-dim
-            "
+            className="btn btn-outline font-sans text-[0.78rem] tracking-[0.08em] uppercase rounded-[3px] px-9 border-[rgba(74,90,58,0.28)] text-soil hover:bg-[rgba(74,90,58,0.07)] hover:text-ink hover:border-moss-dim"
           >
             <GitHubIcon />
             Star on GitHub

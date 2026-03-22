@@ -1,4 +1,4 @@
-import InkcapLogo from './InkcapLogo';
+import InkcapLogo from '@/components/common/InkcapLogo';
 
 // GitHub SVG icon
 function GitHubIcon() {

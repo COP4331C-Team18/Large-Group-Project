@@ -52,12 +52,35 @@ export default function Login() {
   };
 
   return (
-    <div id="loginDiv">
-      <span id="inner-title">PLEASE LOG IN</span><br />
-      <input type="text" id="loginName" placeholder="Username" onChange={handleSetLoginName} /><br />
-      <input type="password" id="loginPassword" placeholder="Password" onChange={handleSetPassword} /><br />
-      <button id="loginButton" className="buttons" onClick={doLogin}>Do It</button>
-      <span id="loginResult">{message}</span>
+    <div className="card w-96 bg-base-100 shadow-xl mx-auto mt-10">
+      <div className="card-body">
+        <h2 className="card-title justify-center mb-4">PLEASE LOG IN</h2>
+        <div className="form-control w-full">
+          <input
+            type="text"
+            placeholder="Username"
+            className="input input-bordered w-full mb-4"
+            onChange={handleSetLoginName}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            className="input input-bordered w-full mb-6"
+            onChange={handleSetPassword}
+          />
+          <button
+            className="btn btn-primary w-full"
+            onClick={doLogin}
+          >
+            Do It
+          </button>
+        </div>
+        {message && (
+          <div className="text-error text-center mt-4 text-sm">
+            {message}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
