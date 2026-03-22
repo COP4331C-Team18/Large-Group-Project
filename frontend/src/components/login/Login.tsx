@@ -58,20 +58,17 @@ export default function Login() {
         <div className="form-control w-full">
           <input
             type="text"
-            id="loginName"
             placeholder="Username"
             className="input input-bordered w-full mb-4"
             onChange={handleSetLoginName}
           />
           <input
             type="password"
-            id="loginPassword"
             placeholder="Password"
             className="input input-bordered w-full mb-6"
             onChange={handleSetPassword}
           />
           <button
-            id="loginButton"
             className="btn btn-primary w-full"
             onClick={doLogin}
           >

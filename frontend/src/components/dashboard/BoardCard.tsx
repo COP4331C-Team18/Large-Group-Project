@@ -1,5 +1,5 @@
 import React from "react";
-import type { BoardCategory } from "../../types/dashboard";
+import type { BoardCategory } from "@/types/dashboard";
 
 type PreviewLineSize = "full" | "medium" | "short" | "xshort";
 
@@ -12,27 +12,9 @@ export interface InkBoardCardProps {
   onClick?: () => void;
 }
 
-const LINE_WIDTH: Record<PreviewLineSize, string> = {
-  full: "w-[90%]",
-  medium: "w-[75%]",
-  short: "w-[55%]",
-  xshort: "w-[40%]",
-};
-
-const DEFAULT_LINES: PreviewLineSize[] = [
-  "full",
-  "medium",
-  "full",
-  "short",
-  "full",
-  "xshort",
-];
-
 const InkBoardCard: React.FC<InkBoardCardProps> = ({
   title,
-  category,
   editedAt,
-  previewLines = DEFAULT_LINES,
   onClick,
 }) => {
   return (
