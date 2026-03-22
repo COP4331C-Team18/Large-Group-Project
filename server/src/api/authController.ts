@@ -170,14 +170,21 @@ export async function signup(req: Request, res: Response) {
     return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters long` });
   }
 
-  try {
-    // Check for duplicates
-    const alreadyExists = await User.findOne({
-      $or: [{ username }, { email }],
-    });
 
-    if (alreadyExists) {
-      return res.status(HTTPStatusCodes.CONFLICT).json({ error: "Username or email already exists" });
+  try {
+    // Check for duplicate email
+    const emailExists = await User.findOne({ email });
+    if (emailExists) {
+      if (emailExists.provider === "google") {
+        return res.status(HTTPStatusCodes.CONFLICT).json({ error: "Email already registered with Google. Please sign in with Google." });
+      }
+      return res.status(HTTPStatusCodes.CONFLICT).json({ error: "Email already registered." });
+    }
+
+    // Check for duplicate username
+    const usernameExists = await User.findOne({ username });
+    if (usernameExists) {
+      return res.status(HTTPStatusCodes.CONFLICT).json({ error: "Username already exists." });
     }
 
     
