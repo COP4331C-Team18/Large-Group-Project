@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../signup.css';
+import VerificationCard from './VerificationCard';
 
 const app_name = 'inkboard.xyz';
 
@@ -20,11 +21,14 @@ export default function Signup() {
     const [signupPassword, setSignupPassword] = useState('');
     const [signupConfirmPassword, setSignupConfirmPassword] = useState('');
     const [message, setMessage] = useState('');
-    const navigate = useNavigate();
+
+    // Property to control display of verification card
+    const [showVerification, setShowVerification] = useState(false);
+    const [submittedEmail, setSubmittedEmail] = useState('');
 
     /* 
-    Handlers for form field changes
-    Send data to backend API
+        Handlers for form field changes
+        Sends data to backend API
     */
     const handleSetSignupEmail = (e: React.ChangeEvent<HTMLInputElement>) => setSignupEmail(e.target.value);
     const handleSetSignupName = (e: React.ChangeEvent<HTMLInputElement>) => setSignupName(e.target.value);
@@ -39,6 +43,19 @@ export default function Signup() {
             return;
         }
 
+        if (!signupEmail || !signupName || !signupPassword || !signupConfirmPassword) {
+            setMessage('Please fill in all fields');
+            return;
+        }
+
+        /* 
+            Temporarily show verification card without API call for testing
+            !!! Reminder to remove this after merging !!!
+        */
+        setShowVerification(true);
+        setSubmittedEmail(signupEmail);
+        return;
+
         const obj = {
             email: signupEmail, name: signupName,
             password: signupPassword, confirmPassword: signupConfirmPassword
@@ -46,8 +63,7 @@ export default function Signup() {
         const js = JSON.stringify(obj);
 
         try {
-            // Need API endpoint for signup
-            const response = await fetch(buildPath('api/signup'), {
+            const response = await fetch(buildPath('api/auth/signup'), {
                 method: 'POST',
                 body: js,
                 headers: { 'Content-Type': 'application/json' }
@@ -57,11 +73,14 @@ export default function Signup() {
 
             if (res.id <= 0 || res.error) {
                 setMessage('Account creation failed. Please try again.');
-            } else {
+            }
+            else {
                 const user = { firstName: res.firstName, lastName: res.lastName, id: res.id };
                 localStorage.setItem('user_data', JSON.stringify(user));
                 setMessage('');
-                navigate('/cards');
+
+                setShowVerification(true);
+                setSubmittedEmail(signupEmail);
             }
         } catch (error: any) {
             alert(error.toString());
@@ -70,45 +89,56 @@ export default function Signup() {
 
     const doGoogleSignup = async (event: React.MouseEvent<HTMLButtonElement>) => {
         event.preventDefault();
-        /* 
-        Implement backend's Google OAuth entry point
-        
-        Backend: Google redirect, get user info, create/finds the account, then return user back to app
-        */
-
         window.location.href = buildPath('api/auth/google');
     };
 
-    //return JSX for the sign-up form
+    // Resets fields 
+    const handleReturn = () => {
+        setShowVerification(false);
+        setSubmittedEmail('');
+        setSignupEmail('');
+        setSignupName('');
+        setSignupPassword('');
+        setSignupConfirmPassword('');
+    };
+
+    // Returns JSX for the sign-up form
     return (
-        <div id="signupDiv">
-            <div id="signupDiv-header">
-                <h2>Welcome to InkBoard</h2>
-                <p>Create an account to save your boards and collaborate with anyone</p>
-            </div>
+        <div id="signupContainer">
+            <div id="signupDiv" className={showVerification ? 'is-hidden-behind' : ''}>
+                <div id="signupDiv-header">
+                    <h2>Welcome to InkBoard</h2>
+                    <p>Create an account to save your boards and collaborate with anyone</p>
+                </div>
 
-            <div id="signupDiv-fields">
-                <input type="email" id="signupEmail" placeholder="Email" onChange={handleSetSignupEmail} />
-                <input type="text" id="signupName" placeholder="Username" onChange={handleSetSignupName} />
-                <input type="password" id="signupPassword" placeholder="Password" onChange={handleSetSignupPassword} />
-                <input type="password" id="signupConfirmPassword" placeholder="Confirm Password" onChange={handleSetSignupConfirmPassword} />
-            </div>
+                <div id="signupDiv-fields">
+                    <input type="email" id="signupEmail" placeholder="Email" value={signupEmail} onChange={handleSetSignupEmail} />
+                    <input type="text" id="signupName" placeholder="Username" value={signupName} onChange={handleSetSignupName} />
+                    <input type="password" id="signupPassword" placeholder="Password" value={signupPassword} onChange={handleSetSignupPassword} />
+                    <input type="password" id="signupConfirmPassword" placeholder="Confirm Password" value={signupConfirmPassword} onChange={handleSetSignupConfirmPassword} />
+                </div>
 
-            <span id="signupDiv-error">{message}</span>
+                <span id="signupDiv-error">{message}</span>
 
+                <button id="signupDiv-button" className="buttons" onClick={doSignup}>
+                    Create Account
+                </button>
 
-            <button id="signupDiv-button" className="buttons" onClick={doSignup}>
-                Create Account
-            </button>
+                <div id="signupDiv-">
+                    <span>or sign up with:</span>
+                </div>
 
-            <div id="signupDiv-">
-                <span>or sign up with:</span>
-            </div>
-
-            <button id="googleButton" className="buttons" onClick={doGoogleSignup}>
-                <img src="../googleIcon.png" alt="GoogleLogo" width={18} height={18} />
-                Google
-            </button>
-        </div >
+                <button id="googleButton" className="buttons" onClick={doGoogleSignup}>
+                    <img src="../googleIcon.png" alt="GoogleLogo" width={24} height={24} />
+                    Google
+                </button>
+            </div >
+            {showVerification && (
+                <VerificationCard
+                    email={submittedEmail}
+                    onReturn={handleReturn}
+                />
+            )}
+        </div>
     );
 };
