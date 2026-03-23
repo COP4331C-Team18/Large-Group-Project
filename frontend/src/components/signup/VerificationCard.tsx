@@ -103,23 +103,32 @@ export default function Verification({ email, onReturn }: VerificationCardProp) 
 
     const submitCode = async (fullCode: string) => {
         setResendMessage('');
+
         try {
             const response = await fetch(buildPath('api/auth/verify-email'), {
-                method: 'POST',
-                body: JSON.stringify({ email, code: fullCode }),
+                method: 'POST',                
+                body: JSON.stringify({ 
+                    email, 
+                    verificationCode: fullCode  // changing payload fields to match the backend function
+                }),  
                 headers: { 'Content-Type': 'application/json' }
             });
             const res = await response.json();
 
-            if (res.error) {
-                setMessage('Incorrect code. Please try again.');
-
+            if (!response.ok) {
+                // if verification fails, show error message and reset code input
+                setMessage( res.error || 'Verification failed. Please try again.'); 
                 setCode(['', '', '', '', '', '']);
                 setTimeout(() => inputRefs.current[0]?.focus(), 3000);
+                return;
             }
-            else {
-                navigate('/dashboard');
-            }
+            
+            // Successful verification -> store JWT token & user
+            localStorage.setItem('token', res.token);
+            localStorage.setItem('user', JSON.stringify(res.user));
+
+            navigate('/dashboard'); // navigate to dashboard after successful verification
+
         } catch (error: any) {
             setMessage('Verification failed. Please try again.');
         }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import VerificationCard from '@/components/signup/VerificationCard';
-
+import OAuth from '@/components/signup/OAuth';
 const app_name = 'inkboard.xyz';
 
 function buildPath(route: string): string {
@@ -46,49 +46,60 @@ export default function Signup() {
             return;
         }
 
+        // ENFORCING THE SAME PASSWORD CHECK ON THE FRONTEND AS THE BACKEND TO PREVENT DUMB ERRORS
+        if (signupPassword.length < 10) {
+            setMessage('Password must be at least 10 characters long');
+            return;
+        }
+
+
         /* 
             Temporarily show verification card without API call for testing
             !!! Reminder to remove this after merging !!!
-        */
+        
         setShowVerification(true);
         setSubmittedEmail(signupEmail);
         return;
+        */
 
+        // matching the payload to what the backend expects
         const obj = {
-            email: signupEmail, name: signupName,
-            password: signupPassword, confirmPassword: signupConfirmPassword
+            username: signupName,
+            email: signupEmail, 
+            password: signupPassword
         };
-        const js = JSON.stringify(obj);
 
         try {
             const response = await fetch(buildPath('api/auth/signup'), {
                 method: 'POST',
-                body: js,
+                body: JSON.stringify(obj),
                 headers: { 'Content-Type': 'application/json' }
             });
 
             const res = await response.json();
 
-            if (res.id <= 0 || res.error) {
-                setMessage('Account creation failed. Please try again.');
+            if (!response.ok) {
+                setMessage(res.error || 'An error occurred during signup');
+                return;
             }
-            else {
-                const user = { firstName: res.firstName, lastName: res.lastName, id: res.id };
-                localStorage.setItem('user_data', JSON.stringify(user));
-                setMessage('');
 
-                setShowVerification(true);
-                setSubmittedEmail(signupEmail);
-            }
+            // Signup successful, show verification card
+            setMessage('');
+            setShowVerification(true);
+            setSubmittedEmail(res.email); // Use the email from the response to ensure it's the one that was processed
+
         } catch (error: any) {
-            alert(error.toString());
+            setMessage('An error occured during signup. Please try again later.');
         }
     };
 
+    /*
+    handled by OAuth component now, but leaving this here for reference until we're sure the OAuth component works fine
     const doGoogleSignup = async (event: React.MouseEvent<HTMLButtonElement>) => {
         event.preventDefault();
         window.location.href = buildPath('api/auth/google');
     };
+    */
 
     // Resets fields 
     const handleReturn = () => {
@@ -103,10 +114,15 @@ export default function Signup() {
     // Returns JSX for the sign-up form
     return (
         <div className="relative w-full max-w-4xl mx-auto flex justify-center items-center min-h-screen p-5">
-            <div className={`card w-full max-w-md bg-base-100 shadow-xl border-2 border-[#d0c5ad] rounded-[40px] p-6 sm:p-10 transition-all duration-300 ${showVerification ? 'blur-[1.5px] opacity-45 pointer-events-none select-none' : ''}`}>
+            <div className={`card w-full max-w-md bg-base-100 shadow-xl border-2 border-[#d0c5ad] rounded-[40px] p-6 sm:p-10 transition-all duration-300 ${showVerification ? 'blur-[1.5px] opacity-45 pointer-events-none select-none' : ''}`}> 
                 <div className="text-center mb-6">
                     <h2 className="text-xl font-semibold mb-2">Welcome to InkBoard</h2>
                     <p className="text-base text-gray-600">Create an account to save your boards and collaborate with anyone</p>
+                </div>
+
+                {/* Google OAuth button */}
+                <div className="mb-4 flex justify-center">
+                    <OAuth />
                 </div>
 
                 <div className="form-control gap-4">
@@ -122,15 +138,6 @@ export default function Signup() {
 
                 <button className="btn w-full bg-[#4a5a3a] text-[#e4ddd0] hover:bg-[#2e3d28] border-none rounded-xl text-lg font-medium h-[60px]" onClick={doSignup}>
                     Create Account
-                </button>
-
-                <div className="text-center text-sm text-gray-500 my-4">
-                    <span>or sign up with:</span>
-                </div>
-
-                <button className="btn w-full bg-[#ebebeb] text-black hover:bg-[#ddd] border-none rounded-xl text-lg h-[60px] flex items-center justify-center gap-2" onClick={doGoogleSignup}>
-                    <img src="/googleIcon.png" alt="GoogleLogo" width={24} height={24} />
-                    Google
                 </button>
             </div>
             
