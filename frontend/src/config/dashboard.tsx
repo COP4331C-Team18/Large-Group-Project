@@ -1,4 +1,4 @@
-import type { InkBoard, SocialLink } from '../types/dashboard';
+import type { InkBoard, SocialLink } from "@/types/dashboard";
 
 export const INKBOARDS_DATA: InkBoard[] = [
   { id: 1, title: 'Project Phoenix', category: 'General', editedAt: '2 hours ago' },

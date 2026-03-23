@@ -11,18 +11,12 @@ const DashboardSection: React.FC<DashboardSectionProps> = ({ title, children, cl
     <section className={`flex flex-col overflow-hidden ${className}`}>
       <div className="mb-6 flex items-baseline gap-3 flex-shrink-0">
         <h2
-          className="text-2xl tracking-tight"
-          style={{
-            fontFamily: "'Playfair Display', Georgia, serif",
-            fontWeight: 700,
-            color: '#2D3A27',
-          }}
+          className="text-2xl tracking-tight font-['Playfair_Display',Georgia,serif] font-bold text-[#2D3A27]"
         >
           {title}
         </h2>
         <div 
-          className="flex-1 h-px mt-1" 
-          style={{ background: 'linear-gradient(to right, #A67C5255, transparent)' }} 
+          className="flex-1 h-px mt-1 bg-gradient-to-r from-[#A67C5255] to-transparent" 
         />
       </div>
       {children}

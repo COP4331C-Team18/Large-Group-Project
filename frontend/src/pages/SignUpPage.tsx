@@ -1,5 +1,5 @@
-import Signup from '../components/SignupCard';
-import Navbar from '../components/SignupNavbar';
+import Signup from '@/components/signup/SignupCard';
+import Navbar from '@/components/signup/SignupNavbar';
 
 export default function SignupPage() {
     return (

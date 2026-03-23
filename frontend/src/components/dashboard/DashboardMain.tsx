@@ -1,18 +1,13 @@
-import InkBoardCard from "./BoardCard";
+import InkBoardCard from "@/components/dashboard/BoardCard";
 import { INKBOARDS_DATA } from "@/config/dashboard";
-import RoomSection from "./RoomSection";
-import DashboardSection from "./DashboardSection";
+import RoomSection from "@/components/dashboard/RoomSection";
+import DashboardSection from "@/components/dashboard/DashboardSection";
 
 const DashboardMain = () => {
   return (
     <div className="h-full flex-1 min-w-0"> {/* Use flex-1 and h-full instead of h-screen w-full */}
       <main
-          className="w-full h-full rounded-[2.5rem] p-8 flex flex-col overflow-hidden gap-4"
-          style={{
-            background: '#f4f1ea', // Slightly lighter than the cards to create depth
-            border: '1.5px solid #A67C5244',
-            boxShadow: '0 2px 16px rgba(15,14,13,0.06)',
-          }}
+          className="w-full h-full rounded-[2.5rem] p-8 flex flex-col overflow-hidden gap-4 bg-[#f4f1ea] border-[1.5px] border-[#A67C5244] shadow-[0_2px_16px_rgba(15,14,13,0.06)]"
         >
                 <RoomSection />
 

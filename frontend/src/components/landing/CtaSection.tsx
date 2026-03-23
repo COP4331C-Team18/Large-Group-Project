@@ -1,3 +1,5 @@
+import { useNavigate } from 'react-router-dom';
+
 function GitHubIcon() {
   return (
     <svg className="w-[14px] h-[14px]" viewBox="0 0 24 24" fill="currentColor">
@@ -7,6 +9,8 @@ function GitHubIcon() {
 }
 
 export default function CtaSection() {
+  const navigate = useNavigate();
+
   return (
     <section className="relative py-36 px-8 text-center max-w-[680px] mx-auto">
       {/* Subtle radial glow */}
@@ -32,8 +36,14 @@ export default function CtaSection() {
         <div className="flex gap-4 justify-center flex-wrap">
           {/* Primary CTA */}
           <button
-            onClick={() => {}}
-            className="btn btn-primary font-sans text-[0.78rem] tracking-[0.1em] uppercase rounded-[3px] px-9"
+            onClick={() => navigate('/signup')}
+            className="
+              flex items-center gap-2
+              font-sans text-[0.78rem] font-semibold tracking-[0.1em] uppercase
+              bg-moss text-stem-light
+              px-9 py-[0.875rem] rounded-[3px] border-none
+              transition-colors duration-200 hover:bg-forest
+            "
           >
             Create free account
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -43,10 +53,18 @@ export default function CtaSection() {
 
           {/* GitHub ghost button */}
           <a
-            href="https://github.com/COP4331C-Team18/Large-Group-Project"
+            href="https://github.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="btn btn-outline font-sans text-[0.78rem] tracking-[0.08em] uppercase rounded-[3px] px-9 border-[rgba(74,90,58,0.28)] text-soil hover:bg-[rgba(74,90,58,0.07)] hover:text-ink hover:border-moss-dim"
+            className="
+              flex items-center gap-2
+              font-sans text-[0.78rem] font-medium tracking-[0.08em] uppercase
+              text-soil bg-transparent
+              px-9 py-[0.875rem] rounded-[3px]
+              border border-[rgba(74,90,58,0.28)]
+              transition-colors duration-200
+              hover:bg-[rgba(74,90,58,0.07)] hover:text-ink hover:border-moss-dim
+            "
           >
             <GitHubIcon />
             Star on GitHub
