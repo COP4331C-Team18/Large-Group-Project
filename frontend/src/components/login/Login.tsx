@@ -27,7 +27,7 @@ export default function Login() {
   const handleSetLoginName = (e: React.ChangeEvent<HTMLInputElement>) => setLoginName(e.target.value);
   const handleSetPassword = (e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value);
 
-  const doLogin = async (event: React.MouseEvent<HTMLButtonElement>) => {
+const doLogin = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     const obj = { login: loginName, password: loginPassword };
     const js = JSON.stringify(obj);
@@ -41,13 +41,19 @@ export default function Login() {
 
       const res = await response.json();
 
-      if (res.id <= 0 || res.error) {
-        setMessage('User/Password combination incorrect');
+      // Check if the response failed (400, 401, etc.)
+      if (!response.ok || res.error) {
+        // Display the specific error from the backend (e.g., "Email not verified")
+        setMessage(res.error || 'User/Password combination incorrect');
       } else {
-        const user = { firstName: res.firstName, lastName: res.lastName, id: res.id };
-        localStorage.setItem('user_data', JSON.stringify(user));
+        // Success! Save the token so PrivateRoutes lets us through
+        localStorage.setItem('token', res.token); 
+        
+        // Save the user data using the object structure your backend actually returns
+        localStorage.setItem('user_data', JSON.stringify(res.user));
+        
         setMessage('');
-        navigate('/dashboard'); // Modern client-side routing
+        navigate('/dashboard'); 
       }
     } catch (error: any) {
       alert(error.toString());

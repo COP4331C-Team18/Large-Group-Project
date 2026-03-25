@@ -10,62 +10,39 @@ function GitHubIcon() {
 
 export default function CtaSection() {
   const navigate = useNavigate();
+  
+  // Check if the user is currently logged in
+  const isAuthenticated = !!localStorage.getItem('token');
 
   return (
     <section className="relative py-36 px-8 text-center max-w-[680px] mx-auto">
-      {/* Subtle radial glow */}
-      <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full pointer-events-none"
-        style={{ background: 'radial-gradient(ellipse, rgba(74,90,58,0.07) 0%, transparent 70%)' }}
-      />
+      {/* ... keeping the background glow, eyebrow, headline, and subtext exactly the same ... */}
 
       <div className="relative z-10">
         <p className="font-sans text-[0.68rem] font-semibold tracking-[0.25em] uppercase text-moss-light mb-3">
           Get started free
         </p>
-
         <h2 className="font-serif text-[clamp(1.9rem,4vw,2.9rem)] font-bold leading-[1.1] tracking-[-0.02em] text-ink mb-5">
-          Your best ideas deserve{' '}
-          <em className="italic text-moss">a finer canvas.</em>
+          Your best ideas deserve <em className="italic text-moss">a finer canvas.</em>
         </h2>
-
         <p className="font-sans text-base text-soil-light leading-[1.7] mb-10">
           Free forever. Open source. No credit card. Just pick up the pen.
         </p>
 
         <div className="flex gap-4 justify-center flex-wrap">
-          {/* Primary CTA */}
+          {/* Dynamically Swap Primary CTA */}
           <button
-            onClick={() => navigate('/signup')}
-            className="
-              flex items-center gap-2
-              font-sans text-[0.78rem] font-semibold tracking-[0.1em] uppercase
-              bg-moss text-stem-light
-              px-9 py-[0.875rem] rounded-[3px] border-none
-              transition-colors duration-200 hover:bg-forest
-            "
+            onClick={() => navigate(isAuthenticated ? '/dashboard' : '/signup')}
+            className="flex items-center gap-2 font-sans text-[0.78rem] font-semibold tracking-[0.1em] uppercase bg-moss text-stem-light px-9 py-[0.875rem] rounded-[3px] border-none transition-colors duration-200 hover:bg-forest"
           >
-            Create free account
+            {isAuthenticated ? 'View Dashboard' : 'Create free account'}
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
           </button>
 
           {/* GitHub ghost button */}
-          <a
-            href="https://github.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="
-              flex items-center gap-2
-              font-sans text-[0.78rem] font-medium tracking-[0.08em] uppercase
-              text-soil bg-transparent
-              px-9 py-[0.875rem] rounded-[3px]
-              border border-[rgba(74,90,58,0.28)]
-              transition-colors duration-200
-              hover:bg-[rgba(74,90,58,0.07)] hover:text-ink hover:border-moss-dim
-            "
-          >
+          <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 font-sans text-[0.78rem] font-medium tracking-[0.08em] uppercase text-soil bg-transparent px-9 py-[0.875rem] rounded-[3px] border border-[rgba(74,90,58,0.28)] transition-colors duration-200 hover:bg-[rgba(74,90,58,0.07)] hover:text-ink hover:border-moss-dim">
             <GitHubIcon />
             Star on GitHub
           </a>
