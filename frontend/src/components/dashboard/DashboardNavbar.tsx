@@ -5,12 +5,7 @@ import InkcapLogo from '@/components/common/InkcapLogo';
 export default function DashboardNavBar() {
   return (
     <nav
-      className="navbar px-5 rounded-2xl border"
-      style={{
-        background: '#ece7db',
-        borderColor: '#A67C5244',
-        boxShadow: '0 2px 12px 0 rgba(15,14,13,0.08)',
-      }}
+      className="navbar px-5 rounded-3xl background-base-dashboard bg-primary-content border-dashboard-accent border-2 shadow-md"
     >
       {/* LEFT: Logo / Home Link */}
       <div className="flex-1">
@@ -20,13 +15,9 @@ export default function DashboardNavBar() {
         >
           <InkcapLogo />
           <span
-            className="text-xl normal-case tracking-tight text-[#2D3A27]"
-            style={{ 
-              fontFamily: "'Playfair Display', Georgia, serif", 
-              fontWeight: 700,
-            }}
+            className="text-xl normal-case tracking-tight text-[#2D3A27] font-serif"
           >
-            Ink-DashBoard
+            Ink DashBoard
           </span>
         </Link>
       </div>
