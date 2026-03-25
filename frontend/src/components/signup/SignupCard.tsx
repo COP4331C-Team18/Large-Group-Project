@@ -4,15 +4,21 @@ import { useNavigate } from 'react-router-dom';
 import VerificationCard from '@/components/signup/VerificationCard';
 import OAuth from '@/components/signup/OAuth';
 
-const app_name = 'inkboard.xyz';
+// const app_name = 'inkboard.xyz';
 
-function buildPath(route: string): string {
-    if (import.meta.env.MODE != 'development') {
-        return 'http://' + app_name + ':5000/' + route;
-    }
-    else {
-        return 'http://localhost:5000/' + route;
-    }
+function buildPath(route:string) : string
+{
+  if (import.meta.env.MODE != 'development')
+  {
+    // Production: Point to the secure domain, NO port 5000!
+    // The leading slash ensures it attaches to the root domain.
+    return '/' + route; 
+  }
+  else
+  {
+    // Local Development remains unchanged
+    return 'http://localhost:5000/' + route;
+  }
 }
 
 export default function Signup() {

@@ -5,7 +5,7 @@ import DashboardMain from '@/components/dashboard/DashboardMain';
 export function Dashboard() {
 
   return (
-    <div className="h-screen w-full p-3 flex flex-col bg-[url('@/components/dashboard/background.png')] gap-3 overflow-hidden">
+    <div className="h-screen w-full p-3 flex flex-col bg-[#ede8df] gap-3 overflow-hidden">
       
       <DashboardNavBar />
       
