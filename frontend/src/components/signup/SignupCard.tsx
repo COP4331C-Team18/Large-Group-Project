@@ -119,9 +119,9 @@ export default function Signup() {
     // Returns JSX for the sign-up form
     return (
         <div className="relative w-full max-w-4xl mx-auto flex justify-center items-center min-h-screen p-5">
-            <div className={`card w-full max-w-md bg-white bg-base-100  border-primary border-t-[3px] rounded-[3px] border-t-cap p-6 sm:p-10 transition-all duration-300 ${showVerification ? 'blur-[1.5px] opacity-45 pointer-events-none select-none' : ''}`}>
+            <div className={`card w-full max-w-md bg-white  border-primary border-t-[3px] rounded-[3px] border-t-cap p-6 sm:p-10 transition-all duration-300 ${showVerification ? 'blur-[1.5px] opacity-45 pointer-events-none select-none' : ''}`}>
                 <div className="text-center mb-6">
-                    <h1 className="font-serif text-2xl font-semibold font-bold leading-[0.95] mb-2 ">Welcome to <em className="text-moss italic-600">InkBoard</em>{' '}
+                    <h1 className="font-serif text-2xl font-bold leading-[0.95] mb-2 ">Welcome to <em className="text-moss italic-600">InkBoard</em>{' '}
                     </h1>
                     <p className="text-base text-gray-600">Create an account to save your boards and collaborate with anyone</p>
                 </div>

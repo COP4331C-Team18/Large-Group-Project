@@ -1,86 +1,79 @@
-import { Request, Response } from "express";
-import User from "../models/User";
-import nodemailer from "nodemailer";
 import { OAuth2Client } from "google-auth-library";
-import { signAccessToken, verifyAccessToken } from "../utils/jwtUtils";
-import { HTTPStatusCodes } from "../utils/statusCodes";
+import User from "../models/User.js";
+import { signAccessToken } from "../utils/jwtUtils.js";
+import { HTTPStatusCodes } from "../utils/statusCodes.js";
+import { Request, Response } from "express";
+import postmark from "postmark";
 
+const MIN_PASSWORD_LENGTH = 10;
+const JWT_EXPIRATION = "1h";
 
-const MIN_PASSWORD_LENGTH = 10; // Define minimum password length (can maybe later add some more checks for the password once we decide on it)
-const JWT_EXPIRATION = "1h"; // token valid for 1 hour
-
-// Helper functions
-// generating 6 digit verification code
+// Generate 6-digit verification code
 function generateVerificationCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// sending verification code to email using nodemailer
+// send verification email via Postmark
 async function sendVerificationEmail(email: string, code: string, expirationMins: number) {
-  const emailUser = process.env.EMAIL_USER;
-  const emailPass = process.env.EMAIL_PASS;
+  const apiKey = process.env.POSTMARK_API_KEY;
+  const fromAddress = process.env.POSTMARK_FROM_EMAIL;
 
-  if (!emailUser || !emailPass) {
-    throw new Error("EMAIL_USER or EMAIL_PASS is not configured");
+  if (!apiKey || !fromAddress) {
+    throw new Error("POSTMARK_API_KEY or POSTMARK_FROM_EMAIL is not configured in .env");
   }
 
-  // Create transporter using environment variables for email credentials
-  try {
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: emailUser,
-        pass: emailPass,
-      },
-    });
+  const client = new postmark.ServerClient(apiKey);
 
-    await transporter.sendMail({
-      from: `Inkboard <${emailUser}>`,
-      to: email,
-      subject: "Verify your Inkboard account",
-      text: `Your Inkboard verification code is: ${code}. Expires in ${expirationMins} minutes.`,
-    });
-  } catch (error) {
-    console.error("Error sending verification email:", error);
-    throw new Error("Failed to send verification email");
-  }
+  await client.sendEmail({
+    From: `InkBoard <${fromAddress}>`,
+    To: email,
+    Subject: "Verify your InkBoard account",
+    TextBody: `Your InkBoard verification code is: ${code}\n\nThis code expires in ${expirationMins} minutes.\n\nIf you did not sign up for InkBoard, you can safely ignore this email.`,
+    HtmlBody: `
+      <div style="font-family: 'Raleway', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #ede8df; border-radius: 4px;">
+        <h2 style="font-family: 'Lora', Georgia, serif; color: #111410; margin-bottom: 8px;">Verify your InkBoard account</h2>
+        <p style="color: #9e8268; margin-bottom: 24px;">Use the code below to complete your sign-up. It expires in <strong>${expirationMins} minutes</strong>.</p>
+        <div style="display: flex; gap: 8px; margin-bottom: 24px;">
+          ${code.split("").map(d => `
+            <div style="
+              width: 40px; height: 52px;
+              background: #f7f2e8;
+              border: 1px solid rgba(74,90,58,0.28);
+              border-radius: 3px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              font-family: 'Lora', Georgia, serif;
+              font-size: 22px;
+              font-weight: 600;
+              color: #2a2d2e;
+              text-align: center;
+              line-height: 52px;
+            ">${d}</div>
+          `).join("")}
+        </div>
+        <p style="color: #9e8268; font-size: 13px;">If you did not sign up for InkBoard, you can safely ignore this email.</p>
+      </div>
+    `,
+    MessageStream: "outbound",
+  });
 }
 
 
-
-/* 
- Sample request payload for login endpoint:
-  "login": "user1", // can be either username or email
-  "password": "password123"
-*/
-
-/*
-  Successful login response payload:
-    "message": "Login successful",
-    "token": "<JWT_TOKEN>",
-    "user":
-      "id": "<USER_ID>",
-      "username": "<USERNAME>",
-      "email": "<EMAIL>"
-*/
-
-/* 
-  Sample error response payload:
-    "error": <Error>
-*/
-
-
 // POST /api/auth/login
+/*
+  Request:  { login: string, password: string }
+  Success:  { message, token, user: { id, username, email } }
+  Error:    { error: string }
+*/
 export async function login(req: Request, res: Response) {
   const { login, password } = req.body;
 
-  // Basic json field validation
   if (!login || !password) {
     return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Missing login or password" });
   }
 
   try {
-    // Allowing login by username OR email
     const user = await User.findOne({
       $or: [{ username: login }, { email: login }],
     });
@@ -89,39 +82,30 @@ export async function login(req: Request, res: Response) {
       return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: "Invalid login or password" });
     }
 
-    // Check if email is verfied for users
     if (user.provider === "inkboard" && !user.verified) {
       return res.status(HTTPStatusCodes.FORBIDDEN).json({ error: "Email not verified." });
     }
 
-    // Check if the email is already registered with google  as a provider
     if (user.provider === "google") {
       return res.status(HTTPStatusCodes.BAD_REQUEST).json({
-        error: "This email is registered with Google. Please sign in with Google."
+        error: "This email is registered with Google. Please sign in with Google.",
       });
     }
 
-    // Compare password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: "Invalid login or password" });
     }
 
-    // Create JWT
     const token = signAccessToken(
       { id: user._id, username: user.username },
       JWT_EXPIRATION
     );
 
-    // success return payload
     return res.status(HTTPStatusCodes.OK).json({
       message: "Login successful",
       token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-      },
+      user: { id: user._id, username: user.username, email: user.email },
     });
   } catch (err) {
     return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: "Server error" });
@@ -129,81 +113,56 @@ export async function login(req: Request, res: Response) {
 }
 
 
-
-
-/* 
-  Sample request payload for signup endpoint:
-    "username": "user1",
-    "email": "user1@example.com",
-    "password": "password123"
-*/
-
-/*
-  Successful signup response payload:
-    "message": "Verification code sent to email.",
-    "email": "<EMAIL>"
-*/
-
-/*
-  Sample error response payload:
-    "error": <Error>
-*/
-
 // POST /api/auth/signup
+/*
+  Request:  { username: string, email: string, password: string }
+  Success:  { message, email }
+  Error:    { error: string }
+*/
 export async function signup(req: Request, res: Response) {
   const { username, email, password } = req.body;
   const verificationExpirationMins = 10;
 
-  // Basic field validation
   if (!username || !email || !password) {
     return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Missing required fields" });
   }
 
-  // Email format check with regex
   const emailRegex = /^\S+@\S+\.\S+$/;
   if (!emailRegex.test(email)) {
     return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Invalid email format" });
   }
 
-  // Password length check ( can later add more checks for password )
   if (password.length < MIN_PASSWORD_LENGTH) {
-    return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters long` });
+    return res.status(HTTPStatusCodes.BAD_REQUEST).json({
+      error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters long`,
+    });
   }
 
-
   try {
-    // Check for duplicate email
     const emailExists = await User.findOne({ email });
+
     if (emailExists) {
-      // Case 1: Email already registered with google provider 
-      // BLOCK signup -> tell the user to login with google
+      // Case 1: registered with Google — block and redirect
       if (emailExists.provider === "google") {
-        return res.status(HTTPStatusCodes.CONFLICT).json({ 
-          error: "Email already registered with Google. Please sign in with Google." 
+        return res.status(HTTPStatusCodes.CONFLICT).json({
+          error: "Email already registered with Google. Please sign in with Google.",
         });
       }
 
-      // Case 2: Email registered with inkboard provider, but is unverified
-      // DO NOT BLOCK signup in this case, simply resend verification email and show message to check email for verification code
-      if(!emailExists.verified) {
+      // Case 2: registered but unverified — resend code
+      if (!emailExists.verified) {
         const verificationCode = generateVerificationCode();
-        const verificationExpirationMins = 10;
-
-        // updating verification code and signup timestamp for existing, unverified user
         emailExists.verificationCode = verificationCode;
-        emailExists.verificationCodeExpires = new Date(Date.now() + verificationExpirationMins * 60 * 1000);
+        emailExists.verificationCodeExpires = new Date(
+          Date.now() + verificationExpirationMins * 60 * 1000
+        );
         await emailExists.save();
 
-        // Send verification email
         try {
-          await sendVerificationEmail(
-            emailExists.email, 
-            verificationCode, 
-            verificationExpirationMins
-          );
+          await sendVerificationEmail(emailExists.email, verificationCode, verificationExpirationMins);
         } catch (emailErr) {
-          return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ 
-            error: "Unable to send verification email. Please try again." 
+          return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({
+            error: "Unable to send verification email. Please try again.",
           });
         }
 
@@ -212,42 +171,36 @@ export async function signup(req: Request, res: Response) {
           email: emailExists.email,
         });
       }
-      
-      // Case 3: Email registered with inkboard provider and is already verified
-      // BLOCK signup and tell user that email is already registered
+
+      // Case 3: already verified — block
       return res.status(HTTPStatusCodes.CONFLICT).json({ error: "Email already registered." });
     }
 
-    // Check for duplicate username
     const usernameExists = await User.findOne({ username });
     if (usernameExists) {
       return res.status(HTTPStatusCodes.CONFLICT).json({ error: "Username already exists." });
     }
 
-    
-
-    // generating a 6 digit verification code
     const verificationCode = generateVerificationCode();
 
-    // Create user 
-    const user = await User.create({ 
-      username, 
-      email, 
+    const user = await User.create({
+      username,
+      email,
       password,
       provider: "inkboard",
-      verified: false, // must call verify-email endpoint to verify email
+      verified: false,
       verificationCode,
       verificationCodeExpires: new Date(Date.now() + verificationExpirationMins * 60 * 1000),
     });
 
-    // Send verification email using nodemailer
     try {
       await sendVerificationEmail(user.email, verificationCode, verificationExpirationMins);
     } catch (emailErr) {
-      await User.deleteOne({ _id: user._id }); // delete user if email sending fails
-      return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: "Unable to send verification email. Please try again." });
+      await User.deleteOne({ _id: user._id });
+      return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({
+        error: "Unable to send verification email. Please try again.",
+      });
     }
-
 
     return res.status(HTTPStatusCodes.CREATED).json({
       message: "Verification code sent to email.",
@@ -259,121 +212,68 @@ export async function signup(req: Request, res: Response) {
 }
 
 
-
-
-
-/*
-  Sample request payload for verify-email endpoint:
-    "email": "<EMAIL>",
-    "verificationCode": <code received in email>
-*/
-
-/*
-  Successful email verification response payload:
-    "message": "Email verified successfully",
-    "token": "<JWT_TOKEN>",
-    "user":
-      "id": "<USER_ID>",
-      "username": "<USERNAME>",
-      "email": "<EMAIL>"
-*/
-
-/*
-  Sample error response payload:
-    "error": <Error>
-*/
-
 // POST /api/auth/verify-email
-export async function verifyEmail(req: Request, res: Response) {  
+/*
+  Request:  { email: string, verificationCode: string }
+  Success:  { message, token, user: { id, username, email } }
+  Error:    { error: string }
+*/
+export async function verifyEmail(req: Request, res: Response) {
   const { email, verificationCode } = req.body;
 
-  // Basic field validation
-  if(!email || !verificationCode) {
+  if (!email || !verificationCode) {
     return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Missing email or verification code" });
-  } 
+  }
 
   try {
     const user = await User.findOne({ email });
 
-    if(!user) {
+    if (!user) {
       return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: "User not found" });
     }
 
-    // check verification status of user
-    if(user.verified) {
+    if (user.verified) {
       return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Email already verified" });
     }
 
-    // Check if verification code matches
-    if(user.verificationCode !== verificationCode) {
+    if (user.verificationCode !== verificationCode) {
       return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Invalid verification code" });
     }
 
-    // Check if code is expired
-    if(!user.verificationCodeExpires || user.verificationCodeExpires < new Date()) {
+    if (!user.verificationCodeExpires || user.verificationCodeExpires < new Date()) {
       return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Verification code expired" });
     }
 
-    // Email is verified
-    // updating user docs
     user.verified = true;
     user.verificationCode = null;
     user.verificationCodeExpires = null;
     await user.save();
 
-    // Creating JWT (expires in 7 days)
     const token = signAccessToken(
       { id: user._id, username: user.username },
       JWT_EXPIRATION
     );
 
-    // Return payload with token and user info
     return res.status(HTTPStatusCodes.OK).json({
       message: "Email verified successfully",
       token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-      },
+      user: { id: user._id, username: user.username, email: user.email },
     });
-
   } catch (err) {
     return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: "Server error" });
   }
-
 }
 
 
-
-
-
-
-/* 
-  Sample request payload for google OAuth endpoint:
-    "idToken": "<GOOGLE_ID_TOKEN>"
-*/
-
-/*
-  Successful google OAuth response payload:
-    "message": "Google login successful",
-    "token": "<JWT_TOKEN>",
-    "user":
-      "id": "<USER_ID>",
-      "username": "<USERNAME>",
-      "email": "<EMAIL>"
-*/
-
-/*
-  Sample error response payload:
-    "error": <Error>
-*/
-
 // POST /api/auth/google
+/*
+  Request:  { idToken: string }
+  Success:  { message, token, user: { id, username, email } }
+  Error:    { error: string }
+*/
 export async function googleOAuth(req: Request, res: Response) {
   const { idToken } = req.body;
 
-  // Basic field validation
   if (!idToken) {
     return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Missing ID token" });
   }
@@ -381,21 +281,19 @@ export async function googleOAuth(req: Request, res: Response) {
   try {
     const googleClientId = process.env.GOOGLE_CLIENT_ID;
 
-    // Check if Google Client ID is configured
     if (!googleClientId) {
-      return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: "Google configuration is missing" });
+      return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({
+        error: "Google configuration is missing",
+      });
     }
 
-    // Creating OAuth2 client
     const client = new OAuth2Client(googleClientId);
 
-    // Verifying the ID token with google
     const ticket = await client.verifyIdToken({
       idToken,
       audience: googleClientId,
     });
 
-    // Extracting user info from token payload
     const payload = ticket.getPayload();
     if (!payload || !payload.email || !payload.name) {
       return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Invalid token payload" });
@@ -405,45 +303,36 @@ export async function googleOAuth(req: Request, res: Response) {
     const name = payload.name;
     const googleId = payload.sub;
 
-    // Find existing user or create new one
     let user = await User.findOne({ email });
 
     if (user) {
-      // User exists - verify they used Google to login
       if (user.provider !== "google") {
-        return res.status(HTTPStatusCodes.CONFLICT).json({ error: "Email already registered with a different provider" });
+        return res.status(HTTPStatusCodes.CONFLICT).json({
+          error: "Email already registered with a different provider",
+        });
       }
     } else {
-      // Create new Google user 
       user = await User.create({
         username: name.replace(/\s+/g, "").toLowerCase() + "_" + googleId.slice(0, 8),
         email,
-        password: "", // Google users don't have password
+        password: "",
         provider: "google",
-        verified: true, // verified by Google
+        verified: true,
       });
     }
 
-    // Create JWT (expires in 7 days)
     const token = signAccessToken(
       { id: user._id, username: user.username },
       JWT_EXPIRATION
     );
 
-    // Return payload for successful login
     return res.status(HTTPStatusCodes.OK).json({
       message: "Google login successful",
       token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-      },
+      user: { id: user._id, username: user.username, email: user.email },
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Google login error:", err);
-
-    // inadded error handling for invalid token
     if (err.message?.includes("Invalid token")) {
       return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: "Invalid or expired token" });
     }
@@ -452,29 +341,15 @@ export async function googleOAuth(req: Request, res: Response) {
 }
 
 
-
-/* 
-  Sample request payload for resend verification endpoint:
-    "email": "<EMAIL>"
-*/
-
-/*
-  Successful resend verification response payload:
-    "message": "Verification code resent to email.",
-    "email": "<EMAIL>"
-*/
-
-/*
-  Sample error response payload:
-    "error": <Error>
-*/
-
-
 // POST /api/auth/resend-verification
+/*
+  Request:  { email: string }
+  Success:  { message, email }
+  Error:    { error: string }
+*/
 export async function resendVerification(req: Request, res: Response) {
   const { email } = req.body;
-  
-  // Basic field validation
+
   if (!email) {
     return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Missing email" });
   }
@@ -482,34 +357,29 @@ export async function resendVerification(req: Request, res: Response) {
   try {
     const user = await User.findOne({ email });
 
-    // Check if user exists
     if (!user) {
       return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: "User not found" });
     }
 
-    // Check if user is already verified
     if (user.verified) {
       return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: "Email already verified" });
     }
 
-    // Generating a new verification code
     const verificationExpirationMins = 10;
     const verificationCode = generateVerificationCode();
 
     user.verificationCode = verificationCode;
-    user.verificationCodeExpires = new Date(Date.now() + verificationExpirationMins * 60 * 1000); // code expires in 10 mins
+    user.verificationCodeExpires = new Date(Date.now() + verificationExpirationMins * 60 * 1000);
     await user.save();
 
-    // Send verification email
     await sendVerificationEmail(user.email, verificationCode, verificationExpirationMins);
 
     return res.status(HTTPStatusCodes.OK).json({
       message: "Verification code resent to email.",
       email: user.email,
     });
-
   } catch (err) {
     console.error("Error in resend verification:", err);
     return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: "Server error" });
-  }   
+  }
 }
