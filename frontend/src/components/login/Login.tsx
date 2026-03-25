@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
 import LoginHero from './LoginHero';
+import OAuth from '@/components/signup/OAuth';
 
 const app_name = 'inkboard.xyz';
 
@@ -31,7 +33,7 @@ export default function Login() {
     const js = JSON.stringify(obj);
 
     try {
-      const response = await fetch(buildPath('api/login'), {
+      const response = await fetch(buildPath('api/auth/login'), {
         method: 'POST',
         body: js,
         headers: { 'Content-Type': 'application/json' }
@@ -111,6 +113,7 @@ export default function Login() {
             />
           </div>
  
+
           <button
             onClick={doLogin}
             className="
@@ -127,6 +130,11 @@ export default function Login() {
             </svg>
             Sign In
           </button>
+
+          {/* Google OAuth button */}
+          <div className="mt-4 flex justify-center w-full">
+            <OAuth />
+          </div>
  
           {message && (
             <p className="font-sans text-[0.84rem] text-red-700 text-center -mt-1">
