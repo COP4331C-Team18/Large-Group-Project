@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getAllBoards, getBoardById, createBoard, updateBoard, deleteBoard } from "./boardController";
+import { getAllBoards, getBoardById, createBoard, updateBoard, deleteBoard } from "./boardController.js";
 
 const router = Router();
 
