@@ -11,6 +11,17 @@ export default {
         sans:   ['Raleway', 'sans-serif'],
       },
       colors: {
+
+
+        //Dashboard-colors
+        'dashboard-txt': '#2a2d2e', //text
+        'dashboard-primary': '#4a5a3a', // moss
+        'dashboard-primary-content': '#e4ddd0', // stem-light
+        'base-dashboard': '#e8e2d8', // base-200
+        'dashboard-secondary': '#6b5540', // soil
+        'dashboard-accent': '#2a2d2e', // cap
+
+
         cap:        '#2a2d2e',
         'cap-mid':  '#3d4244',
         stem:       '#c8bfae',

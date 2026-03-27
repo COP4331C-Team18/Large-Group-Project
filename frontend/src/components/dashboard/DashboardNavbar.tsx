@@ -1,16 +1,25 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom'; // <-- Import useNavigate
 import { UserCircle, Settings, LogOut } from 'lucide-react';
 import InkcapLogo from '@/components/common/InkcapLogo';
 
 export default function DashboardNavBar() {
+  const navigate = useNavigate(); // <-- Initialize navigate
+
+  const handleLogout = () => {
+    // 1. Remove the JWT token from storage 
+    // (Make sure 'token' matches the key you used when storing it during login)
+    localStorage.removeItem('token'); 
+    
+    // Optional: If you stored user info, remove that too
+    // localStorage.removeItem('user'); 
+
+    // 2. Redirect to the login page
+    navigate('/login'); 
+  };
+
   return (
     <nav
-      className="navbar px-5 rounded-2xl border"
-      style={{
-        background: '#ece7db',
-        borderColor: '#A67C5244',
-        boxShadow: '0 2px 12px 0 rgba(15,14,13,0.08)',
-      }}
+      className="navbar px-5 rounded-3xl background-base-dashboard bg-primary-content border-dashboard-accent border-2 shadow-md"
     >
       {/* LEFT: Logo / Home Link */}
       <div className="flex-1">
@@ -20,13 +29,9 @@ export default function DashboardNavBar() {
         >
           <InkcapLogo />
           <span
-            className="text-xl normal-case tracking-tight text-[#2D3A27]"
-            style={{ 
-              fontFamily: "'Playfair Display', Georgia, serif", 
-              fontWeight: 700,
-            }}
+            className="text-xl normal-case tracking-tight text-[#2D3A27] font-serif"
           >
-            Ink-DashBoard
+            Ink DashBoard
           </span>
         </Link>
       </div>
@@ -56,16 +61,16 @@ export default function DashboardNavBar() {
         {/* Subtle gold divider */}
         <div className="w-px h-5 mx-1" style={{ background: '#A67C5266' }} />
 
-          {/*(The Logout Button)*/}
-  <button
-    className="btn btn-square btn-ghost hover:bg-[#A67C5222]" // Added subtle hover for better UX
-    aria-label="Logout"
-    title="Logout"
-    style={{ color: 'red' }}
-  >
-    <LogOut className="h-5 w-5" />
-  </button>
-
+        {/* (The Logout Button) */}
+        <button
+          onClick={handleLogout} // <-- Add the onClick handler here
+          className="btn btn-square btn-ghost hover:bg-[#A67C5222]" 
+          aria-label="Logout"
+          title="Logout"
+          style={{ color: 'red' }}
+        >
+          <LogOut className="h-5 w-5" />
+        </button>
         
       </div>
     </nav>

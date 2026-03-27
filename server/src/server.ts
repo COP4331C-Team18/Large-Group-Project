@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import http from 'http';
+// Change these:
 import connectDB from './config/db';
 import authRoutes from './api/authRoutes';
 import userRoutes from './api/userRoutes';

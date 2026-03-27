@@ -37,7 +37,7 @@ export default function Navbar() {
       <div className="flex items-center gap-2">
         {/* GitHub */}
         <a
-          href="https://github.com/COP4331C-Team18/Large-Group-Project"
+          href="https://github.com"
           target="_blank"
           rel="noopener noreferrer"
           className="

@@ -12,6 +12,10 @@ function GitHubIcon() {
 
 export default function Navbar() {
   const navigate = useNavigate();
+  
+  // Check if the user is currently logged in
+  const isAuthenticated = !!localStorage.getItem('token');
+
   return (
     <nav
       className="
@@ -23,14 +27,7 @@ export default function Navbar() {
       "
     >
       {/* Logo */}
-      <a
-        href="/"
-        className="
-          flex items-center gap-[0.65rem]
-          font-serif text-[1.3rem] font-bold tracking-[-0.01em]
-          text-ink no-underline
-        "
-      >
+      <a href="/" className="flex items-center gap-[0.65rem] font-serif text-[1.3rem] font-bold tracking-[-0.01em] text-ink no-underline">
         <InkcapLogo width={28} height={32} />
         InkBoard
       </a>
@@ -38,51 +35,36 @@ export default function Navbar() {
       {/* Nav links */}
       <div className="flex items-center gap-2">
         {/* GitHub */}
-        <a
-          href="https://github.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="
-            flex items-center gap-[0.4rem]
-            font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase
-            text-soil px-[0.9rem] py-[0.45rem] rounded
-            transition-colors duration-200
-            hover:text-ink hover:bg-[rgba(74,90,58,0.08)]
-          "
-        >
+        <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-[0.4rem] font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase text-soil px-[0.9rem] py-[0.45rem] rounded transition-colors duration-200 hover:text-ink hover:bg-[rgba(74,90,58,0.08)]">
           <GitHubIcon />
           GitHub
         </a>
 
-        {/* Log in */}
-        <button
-          onClick={() => navigate('/login')}
-          className="
-            flex items-center gap-[0.4rem]
-            font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase
-            text-cap px-[0.9rem] py-[0.45rem] rounded
-            border border-[rgba(74,90,58,0.28)]
-            transition-colors duration-200
-            hover:text-ink hover:bg-[rgba(74,90,58,0.08)]
-          "
-        >
-          Log in
-        </button>
-
-        {/* Create account */}
-        <button
-          onClick={() => navigate('/signup')}
-          className="
-            flex items-center gap-[0.4rem]
-            font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase
-            bg-moss text-stem-light
-            px-[0.9rem] py-[0.45rem] rounded border-none
-            transition-colors duration-200
-            hover:bg-forest
-          "
-        >
-          Create account
-        </button>
+        {isAuthenticated ? (
+          /* Show Dashboard button if logged in */
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center gap-[0.4rem] font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase bg-moss text-stem-light px-[0.9rem] py-[0.45rem] rounded border-none transition-colors duration-200 hover:bg-forest"
+          >
+            View Dashboard
+          </button>
+        ) : (
+          /* Show Login / Signup if NOT logged in */
+          <>
+            <button
+              onClick={() => navigate('/login')}
+              className="flex items-center gap-[0.4rem] font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase text-cap px-[0.9rem] py-[0.45rem] rounded border border-[rgba(74,90,58,0.28)] transition-colors duration-200 hover:text-ink hover:bg-[rgba(74,90,58,0.08)]"
+            >
+              Log in
+            </button>
+            <button
+              onClick={() => navigate('/signup')}
+              className="flex items-center gap-[0.4rem] font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase bg-moss text-stem-light px-[0.9rem] py-[0.45rem] rounded border-none transition-colors duration-200 hover:bg-forest"
+            >
+              Create account
+            </button>
+          </>
+        )}
       </div>
     </nav>
   );

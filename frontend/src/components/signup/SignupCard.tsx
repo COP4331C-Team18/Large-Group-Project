@@ -1,18 +1,29 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 import VerificationCard from '@/components/signup/VerificationCard';
 import OAuth from '@/components/signup/OAuth';
-const app_name = 'inkboard.xyz';
 
-function buildPath(route: string): string {
-    if (import.meta.env.MODE != 'development') {
-        return 'http://' + app_name + ':5000/' + route;
-    }
-    else {
-        return 'http://localhost:5000/' + route;
-    }
+// const app_name = 'inkboard.xyz';
+
+function buildPath(route:string) : string
+{
+  if (import.meta.env.MODE != 'development')
+  {
+    // Production: Point to the secure domain, NO port 5000!
+    // The leading slash ensures it attaches to the root domain.
+    return '/' + route; 
+  }
+  else
+  {
+    // Local Development remains unchanged
+    return 'http://localhost:5000/' + route;
+  }
 }
 
 export default function Signup() {
+    const navigate = useNavigate();
+
     // useState hooks to store form field values
     const [signupEmail, setSignupEmail] = useState('');
     const [signupName, setSignupName] = useState('');
@@ -36,13 +47,13 @@ export default function Signup() {
     const doSignup = async (event: React.MouseEvent<HTMLButtonElement>) => {
         event.preventDefault();
 
-        if (signupPassword !== signupConfirmPassword) {
-            setMessage('Passwords do not match');
+        if (!signupEmail || !signupName || !signupPassword || !signupConfirmPassword) {
+            setMessage('Please fill in all fields');
             return;
         }
 
-        if (!signupEmail || !signupName || !signupPassword || !signupConfirmPassword) {
-            setMessage('Please fill in all fields');
+        if (signupPassword !== signupConfirmPassword) {
+            setMessage('Passwords do not match');
             return;
         }
 
@@ -65,7 +76,7 @@ export default function Signup() {
         // matching the payload to what the backend expects
         const obj = {
             username: signupName,
-            email: signupEmail, 
+            email: signupEmail,
             password: signupPassword
         };
 
@@ -114,41 +125,83 @@ export default function Signup() {
     // Returns JSX for the sign-up form
     return (
         <div className="relative w-full max-w-4xl mx-auto flex justify-center items-center min-h-screen p-5">
-            <div className={`card w-full max-w-md bg-base-100 shadow-xl border-2 border-[#d0c5ad] rounded-[40px] p-6 sm:p-10 transition-all duration-300 ${showVerification ? 'blur-[1.5px] opacity-45 pointer-events-none select-none' : ''}`}> 
+            <div className={`card w-full max-w-md bg-white  border-primary border-t-[3px] rounded-[3px] border-t-cap p-6 sm:p-10 transition-all duration-300 ${showVerification ? 'blur-[1.5px] opacity-45 pointer-events-none select-none' : ''}`}>
                 <div className="text-center mb-6">
-                    <h2 className="text-xl font-semibold mb-2">Welcome to InkBoard</h2>
+                    <h1 className="font-serif text-2xl font-bold leading-[0.95] mb-2 ">Welcome to <em className="text-moss italic-600">InkBoard</em>{' '}
+                    </h1>
                     <p className="text-base text-gray-600">Create an account to save your boards and collaborate with anyone</p>
                 </div>
 
-                {/* Google OAuth button */}
-                <div className="mb-4 flex justify-center">
-                    <OAuth />
-                </div>
-
                 <div className="form-control gap-4">
-                    <input type="email" placeholder="Email" value={signupEmail} onChange={handleSetSignupEmail} className="input input-bordered w-full bg-[#ebebeb] rounded-xl" />
-                    <input type="text" placeholder="Username" value={signupName} onChange={handleSetSignupName} className="input input-bordered w-full bg-[#ebebeb] rounded-xl" />
-                    <input type="password" placeholder="Password" value={signupPassword} onChange={handleSetSignupPassword} className="input input-bordered w-full bg-[#ebebeb] rounded-xl" />
-                    <input type="password" placeholder="Confirm Password" value={signupConfirmPassword} onChange={handleSetSignupConfirmPassword} className="input input-bordered w-full bg-[#ebebeb] rounded-xl" />
+                    <input type="email" placeholder="Email" value={signupEmail} onChange={handleSetSignupEmail}
+                        className="w-full px-4 py-[0.7rem]
+                        font-sans text-[0.93rem] text-ink
+                        bg-stem-bg border border-[rgba(74,90,58,0.28)] rounded-[3px]
+                        placeholder:text-soil-light
+                        outline-none
+                        focus:border-moss focus:ring-2 focus:ring-[rgba(74,90,58,0.15)]
+                        transition-all duration-150" />
+                    <input type="text" placeholder="Username" value={signupName} onChange={handleSetSignupName} className="w-full px-4 py-[0.7rem]
+                        font-sans text-[0.93rem] text-ink
+                        bg-stem-bg border border-[rgba(74,90,58,0.28)] rounded-[3px]
+                        placeholder:text-soil-light
+                        outline-none
+                        focus:border-moss focus:ring-2 focus:ring-[rgba(74,90,58,0.15)]
+                        transition-all duration-150" />
+                    <input type="password" placeholder="Password" value={signupPassword} onChange={handleSetSignupPassword} className="w-full px-4 py-[0.7rem]
+                        font-sans text-[0.93rem] text-ink
+                        bg-stem-bg border border-[rgba(74,90,58,0.28)] rounded-[3px]
+                        placeholder:text-soil-light
+                        outline-none
+                        focus:border-moss focus:ring-2 focus:ring-[rgba(74,90,58,0.15)]
+                        transition-all duration-150" />
+                    <input type="password" placeholder="Confirm Password" value={signupConfirmPassword} onChange={handleSetSignupConfirmPassword}
+                        className="w-full px-4 py-[0.7rem]
+                        font-sans text-[0.93rem] text-ink
+                        bg-stem-bg border border-[rgba(74,90,58,0.28)] rounded-[3px]
+                        placeholder:text-soil-light
+                        outline-none
+                        focus:border-moss focus:ring-2 focus:ring-[rgba(74,90,58,0.15)]
+                        transition-all duration-150" />
                 </div>
 
-                <div className="text-error text-sm min-h-[16px] my-2 text-center">
+                <div className="text-error text-sm min-h-[16px] my-2 text-center p-[2px]">
                     {message}
                 </div>
 
-                <button className="btn w-full bg-[#4a5a3a] text-[#e4ddd0] hover:bg-[#2e3d28] border-none rounded-xl text-lg font-medium h-[60px]" onClick={doSignup}>
+                <button className="btn w-full bg-[#4a5a3a] text-[#e4ddd0] hover:bg-[#2e3d28] border-none rounded-[3px] font-sans text-[0.76rem] font-semibold tracking-[0.1em] uppercase" onClick={doSignup}>
                     Create Account
                 </button>
+
+                {/* Google OAuth button */}
+                <button className="mt-4 flex justify-center ">
+                    <OAuth />
+                </button>
+
+                <p className="font-sans text-[0.84rem] text-soil-light text-center mt-[10px] pt-1">
+                    Already have an account?{' '}
+                    <button
+                        onClick={() => navigate('/login')}
+                        className="text-moss font-semibold
+                            border-b border-[rgba(74,90,58,0.3)] pb-px
+                            hover:border-moss transition-colors duration-150
+                            bg-transparent border-x-0 border-t-0 cursor-pointer p-0"
+                    >
+                        Sign In
+                    </button>
+                </p>
             </div>
-            
-            {showVerification && (
-                <div className="absolute inset-0 flex justify-center items-center z-10 p-5">
-                    <VerificationCard
-                        email={submittedEmail}
-                        onReturn={handleReturn}
-                    />
-                </div>
-            )}
-        </div>
+            {
+                showVerification && (
+                    <div className="absolute inset-0 flex justify-center items-center z-10 p-5">
+                        <VerificationCard
+                            email={submittedEmail}
+                            onReturn={handleReturn}
+                        />
+                    </div>
+                )
+            }
+
+        </div >
     );
 }

@@ -5,14 +5,20 @@ declare const google: any;
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
-const app_name = "inkboard.xyz";
+// const app_name = 'inkboard.xyz';
 
-function buildPath(route: string): string {
-    if (import.meta.env.MODE !== "development") {
-        return "http://" + app_name + ":5000/" + route;
-    } else {
-        return "http://localhost:5000/" + route;
-    }
+function buildPath(route:string) : string
+{
+  if (import.meta.env.MODE != 'development')
+  {
+    // Production: Point to the secure domain, NO port 5000!
+    return '/' + route; 
+  }
+  else
+  {
+    // Local Development remains unchanged
+    return 'http://localhost:5000/' + route;
+  }
 }
 
 
