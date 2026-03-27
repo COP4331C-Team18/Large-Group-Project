@@ -3,7 +3,7 @@ import User from "../models/User.js";
 import { signAccessToken } from "../utils/jwtUtils.js";
 import { HTTPStatusCodes } from "../utils/statusCodes.js";
 import { Request, Response } from "express";
-import postmark from "postmark";
+import * as postmark from "postmark";
 
 const MIN_PASSWORD_LENGTH = 10;
 const JWT_EXPIRATION = "1h";
