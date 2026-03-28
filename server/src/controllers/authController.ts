@@ -63,7 +63,7 @@ async function sendVerificationEmail(email: string, code: string, expirationMins
 // POST /api/auth/login
 /*
   Request:  { login: string, password: string }
-  Success:  { message, token, user: { id, username, email } }
+  Success:  { message, user: { id, username, email } } // token is sent in http-only cookie
   Error:    { error: string }
 */
 export async function login(req: Request, res: Response) {
@@ -102,9 +102,18 @@ export async function login(req: Request, res: Response) {
       JWT_EXPIRATION
     );
 
+    const httpsEnabled = process.env.PRODUCTION === "true" ? true : false;
+
+    // Returning token in a http-only cookie
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: httpsEnabled, // Set to true in production (requires HTTPS)
+      sameSite: "lax", // for cross-origin requests from frontend
+      maxAge: 60 * 60 * 1000, // 1 hour
+    });
+
     return res.status(HTTPStatusCodes.OK).json({
       message: "Login successful",
-      token,
       user: { id: user._id, username: user.username, email: user.email },
     });
   } catch (err) {
@@ -215,7 +224,7 @@ export async function signup(req: Request, res: Response) {
 // POST /api/auth/verify-email
 /*
   Request:  { email: string, verificationCode: string }
-  Success:  { message, token, user: { id, username, email } }
+  Success:  { message, user: { id, username, email } } // token is sent in http-only cookie
   Error:    { error: string }
 */
 export async function verifyEmail(req: Request, res: Response) {
@@ -254,9 +263,17 @@ export async function verifyEmail(req: Request, res: Response) {
       JWT_EXPIRATION
     );
 
+    const httpsEnabled = process.env.PRODUCTION === "true" ? true : false;
+    // Returning token in a http-only cookie
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: httpsEnabled, // Set to true in production (requires HTTPS)
+      sameSite: "lax",
+      maxAge: 60 * 60 * 1000 // 1 hour
+    });
+
     return res.status(HTTPStatusCodes.OK).json({
       message: "Email verified successfully",
-      token,
       user: { id: user._id, username: user.username, email: user.email },
     });
   } catch (err) {
@@ -268,7 +285,7 @@ export async function verifyEmail(req: Request, res: Response) {
 // POST /api/auth/google
 /*
   Request:  { idToken: string }
-  Success:  { message, token, user: { id, username, email } }
+  Success:  { message, user: { id, username, email } } // token is sent in http-only cookie
   Error:    { error: string }
 */
 export async function googleOAuth(req: Request, res: Response) {
@@ -326,9 +343,18 @@ export async function googleOAuth(req: Request, res: Response) {
       JWT_EXPIRATION
     );
 
+    const httpsEnabled = process.env.PRODUCTION === "true" ? true : false;
+
+    // Returning token in a http-only cookie
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: httpsEnabled, // Set to true in production (requires HTTPS)
+      sameSite: "lax",
+      maxAge: 60 * 60 * 1000, // 1 hour
+    });
+
     return res.status(HTTPStatusCodes.OK).json({
       message: "Google login successful",
-      token,
       user: { id: user._id, username: user.username, email: user.email },
     });
   } catch (err: any) {

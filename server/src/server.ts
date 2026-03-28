@@ -2,15 +2,28 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import http from 'http';
-// Change these:
+import cookieParser from 'cookie-parser';
+import rateLimiter from './middleware/rateLimiter.js';
+
 import connectDB from './config/db.js';
-import authRoutes from './api/authRoutes.js';
-import userRoutes from './api/userRoutes.js';
-import boardRoutes from './api/boardRoutes.js';
+import authRoutes from './routers/authRoutes.js';
+import userRoutes from './routers/userRoutes.js';
+import boardRoutes from './routers/boardRoutes.js';
 
 const app = express();
-app.use(cors());
+
+const corsOptions = {
+    origin: 'http://localhost:5173',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
+app.use(cookieParser());
+app.use(rateLimiter);
+app.options("*", cors(corsOptions)); // Handle preflight requests for all routes
 
 connectDB();
 
