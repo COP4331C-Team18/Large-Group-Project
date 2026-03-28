@@ -39,8 +39,8 @@ export const protect = asyncHandler(async (req: Request, res: Response, next: Ne
             throw new Error('Not authorized, token failed');
         }
     } else {
-        // 5. If no cookie is found
-        res.status(401);
-        throw new Error('Not authorized, no token provided');
+        // 5. If no cookie is found: 
+        // We send the 401 but DO NOT throw an Error to avoid terminal spam.
+        res.status(401).json({ message: 'Not authorized, no token provided' });
     }
 });

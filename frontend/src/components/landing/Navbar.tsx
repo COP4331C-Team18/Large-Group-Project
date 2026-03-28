@@ -1,23 +1,6 @@
-import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import InkcapLogo from '@/components/common/InkcapLogo';
-
-// const app_name = 'inkboard.xyz';
-
-function buildPath(route:string) : string
-{
-  if (import.meta.env.MODE != 'development')
-  {
-    // Production: Point to the secure domain, NO port 5000!
-    // The leading slash ensures it attaches to the root domain.
-    return '/' + route; 
-  }
-  else
-  {
-    // Local Development remains unchanged
-    return 'http://localhost:5000/' + route;
-  }
-}
+import { useAuth } from '@/context/AuthContext';  
 
 // GitHub SVG icon
 function GitHubIcon() {
@@ -30,21 +13,8 @@ function GitHubIcon() {
 
 export default function Navbar() {
   const navigate = useNavigate();
-  
-  // Check if the user is currently logged in
- // const isAuthenticated = !!localStorage.getItem('token');
-
-  // using a state based auth check based on cookies instead of localStorage, since we switched to cookie-based authentication
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  useEffect(() => {
-    fetch(buildPath('api/auth/me'), {
-      method: 'GET',
-      credentials: 'include',
-    })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => setIsAuthenticated(!!data && !!data.user))
-      .catch(() => setIsAuthenticated(false));
-  }, []);
+  const { user } = useAuth();
+  const isAuthenticated = !!user;
 
   return (
     <nav

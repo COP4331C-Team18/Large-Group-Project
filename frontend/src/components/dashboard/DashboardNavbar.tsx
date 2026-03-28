@@ -1,38 +1,11 @@
-import { Link, useNavigate } from 'react-router-dom'; // <-- Import useNavigate
+import { Link } from 'react-router-dom'; // <-- Import useNavigate
 import { UserCircle, Settings, LogOut } from 'lucide-react';
 import InkcapLogo from '@/components/common/InkcapLogo';
-
-
-// const app_name = 'inkboard.xyz';
-
-function buildPath(route:string) : string
-{
-  if (import.meta.env.MODE != 'development')
-  {
-    // Production: Point to the secure domain, NO port 5000!
-    return '/' + route; 
-  }
-  else
-  {
-    // Local Development remains unchanged
-    return 'http://localhost:5000/' + route;
-  }
-}
+import { useAuth } from '@/context/AuthContext';
 
 export default function DashboardNavBar() {
-  const navigate = useNavigate(); // <-- Initialize navigate
-
-  const handleLogout = async () => {
-    try {
-      await fetch(buildPath('/api/auth/logout'), {
-        method: 'POST',
-        credentials: 'include',
-      });
-    } catch (e) {
-      // ignore errors
-    }
-    navigate('/login');
-  };
+  const {logout} = useAuth();
+ 
   return (
     <nav
       className="navbar px-5 rounded-3xl background-base-dashboard bg-primary-content border-dashboard-accent border-2 shadow-md"
@@ -79,7 +52,7 @@ export default function DashboardNavBar() {
 
         {/* (The Logout Button) */}
         <button
-          onClick={handleLogout} // <-- Add the onClick handler here
+          onClick={logout} // <-- Add the onClick handler here
           className="btn btn-square btn-ghost hover:bg-[#A67C5222]" 
           aria-label="Logout"
           title="Logout"

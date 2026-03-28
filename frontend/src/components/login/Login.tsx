@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import LoginHero from './LoginHero';
 import OAuth from '@/components/signup/OAuth';
+import { useAuth } from '@/context/AuthContext';
 
 // const app_name = 'inkboard.xyz';
 
@@ -29,30 +30,26 @@ export default function Login() {
   const handleSetLoginName = (e: React.ChangeEvent<HTMLInputElement>) => setLoginName(e.target.value);
   const handleSetPassword = (e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value);
 
-const doLogin = async (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    const obj = { login: loginName, password: loginPassword };
-    const js = JSON.stringify(obj);
+  // Inside your Login component
+  const { login } = useAuth();
 
+  const doLogin = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
     try {
       const response = await fetch(buildPath('api/auth/login'), {
         method: 'POST',
-        body: js,
+        body: JSON.stringify({ login: loginName, password: loginPassword }),
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include' // Send cookies for authentication
+        credentials: 'include' 
       });
 
       const res = await response.json();
 
-      // Check if the response failed (400, 401, etc.)
       if (!response.ok || res.error) {
-        // Display the specific error from the backend (e.g., "Email not verified")
-        setMessage(res.error || 'User/Password combination incorrect');
+        setMessage(res.error || 'Login failed');
       } else {
-
-        // Success! The server should have set an HttpOnly cookie, so we just navigate to the dashboard
-        setMessage('');
-        navigate('/dashboard'); 
+        // Update global context state so other components know we are logged in
+        login(res.user); 
       }
     } catch (error: any) {
       alert(error.toString());

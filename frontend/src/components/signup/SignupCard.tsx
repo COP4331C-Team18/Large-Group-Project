@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import VerificationCard from '@/components/signup/VerificationCard';
 import OAuth from '@/components/signup/OAuth';
+import { useAuth } from '@/context/AuthContext';
 
 // const app_name = 'inkboard.xyz';
 
@@ -23,6 +24,7 @@ function buildPath(route:string) : string
 
 export default function Signup() {
     const navigate = useNavigate();
+    const { user, loading } = useAuth();
 
     // useState hooks to store form field values
     const [signupEmail, setSignupEmail] = useState('');
@@ -34,6 +36,14 @@ export default function Signup() {
     // Property to control display of verification card
     const [showVerification, setShowVerification] = useState(false);
     const [submittedEmail, setSubmittedEmail] = useState('');
+
+    // Redirect to dashboard if already logged in (optional, can be handled by PrivateRoutes as well)
+    // Redirect if already logged in
+    useEffect(() => {
+        if (!loading && user) {
+            navigate('/dashboard');
+        }
+        }, [user, loading, navigate]);
 
     /* 
         Handlers for form field changes

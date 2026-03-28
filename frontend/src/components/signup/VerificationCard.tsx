@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
 
 // const app_name = 'inkboard.xyz';
 
@@ -23,11 +23,11 @@ interface VerificationCardProp {
 }
 
 export default function Verification({ email, onReturn }: VerificationCardProp) {
+    const { login } = useAuth();
     const [code, setCode] = useState<string[]>(['', '', '', '', '', '']);
     const [message, setMessage] = useState('');
     const [resendMessage, setResendMessage] = useState('');
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-    const navigate = useNavigate();
 
     const handleInputChange = (index: number, value: string) => {
         const digit = value.replace(/\D/g, '').slice(-1);
@@ -116,7 +116,8 @@ export default function Verification({ email, onReturn }: VerificationCardProp) 
                     email, 
                     verificationCode: fullCode  // changing payload fields to match the backend function
                 }),  
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include' // Send cookies for authentication
             });
             const res = await response.json();
 
@@ -128,12 +129,8 @@ export default function Verification({ email, onReturn }: VerificationCardProp) 
                 return;
             }
             
-            // Successful verification -> store JWT token & user
-            localStorage.setItem('token', res.token);
-            localStorage.setItem('user', JSON.stringify(res.user));
-
-            navigate('/dashboard'); // navigate to dashboard after successful verification
-
+            // update global context and navigate to dashboard on successful verification
+            login(res.user); // update context with logged in user
         } catch (error: any) {
             setMessage('Verification failed. Please try again.');
         }
