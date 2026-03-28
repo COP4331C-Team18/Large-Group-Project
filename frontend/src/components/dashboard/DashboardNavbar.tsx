@@ -2,21 +2,37 @@ import { Link, useNavigate } from 'react-router-dom'; // <-- Import useNavigate
 import { UserCircle, Settings, LogOut } from 'lucide-react';
 import InkcapLogo from '@/components/common/InkcapLogo';
 
+
+// const app_name = 'inkboard.xyz';
+
+function buildPath(route:string) : string
+{
+  if (import.meta.env.MODE != 'development')
+  {
+    // Production: Point to the secure domain, NO port 5000!
+    return '/' + route; 
+  }
+  else
+  {
+    // Local Development remains unchanged
+    return 'http://localhost:5000/' + route;
+  }
+}
+
 export default function DashboardNavBar() {
   const navigate = useNavigate(); // <-- Initialize navigate
 
-  const handleLogout = () => {
-    // 1. Remove the JWT token from storage 
-    // (Make sure 'token' matches the key you used when storing it during login)
-    localStorage.removeItem('token'); 
-    
-    // Optional: If you stored user info, remove that too
-    // localStorage.removeItem('user'); 
-
-    // 2. Redirect to the login page
-    navigate('/login'); 
+  const handleLogout = async () => {
+    try {
+      await fetch(buildPath('/api/auth/logout'), {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (e) {
+      // ignore errors
+    }
+    navigate('/login');
   };
-
   return (
     <nav
       className="navbar px-5 rounded-3xl background-base-dashboard bg-primary-content border-dashboard-accent border-2 shadow-md"

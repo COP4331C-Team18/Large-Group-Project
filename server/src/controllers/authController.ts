@@ -431,3 +431,15 @@ export async function getCurrentUser(req: Request, res: Response) {
     }
   });
 }
+
+// POST /api/auth/logout
+export function logout(req: Request, res: Response) {
+  const isProd = process.env.PRODUCTION === "true";
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
+    path: "/",
+  });
+  return res.status(200).json({ message: "Logged out" });
+}
