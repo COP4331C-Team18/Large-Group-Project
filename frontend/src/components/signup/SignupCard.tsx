@@ -84,7 +84,8 @@ export default function Signup() {
             const response = await fetch(buildPath('api/auth/signup'), {
                 method: 'POST',
                 body: JSON.stringify(obj),
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include' // Send cookies for authentication
             });
 
             const res = await response.json();

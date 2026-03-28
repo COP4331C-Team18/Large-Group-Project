@@ -38,7 +38,8 @@ const doLogin = async (event: React.MouseEvent<HTMLButtonElement>) => {
       const response = await fetch(buildPath('api/auth/login'), {
         method: 'POST',
         body: js,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include' // Send cookies for authentication
       });
 
       const res = await response.json();
@@ -48,12 +49,8 @@ const doLogin = async (event: React.MouseEvent<HTMLButtonElement>) => {
         // Display the specific error from the backend (e.g., "Email not verified")
         setMessage(res.error || 'User/Password combination incorrect');
       } else {
-        // Success! Save the token so PrivateRoutes lets us through
-        localStorage.setItem('token', res.token); 
-        
-        // Save the user data using the object structure your backend actually returns
-        localStorage.setItem('user_data', JSON.stringify(res.user));
-        
+
+        // Success! The server should have set an HttpOnly cookie, so we just navigate to the dashboard
         setMessage('');
         navigate('/dashboard'); 
       }

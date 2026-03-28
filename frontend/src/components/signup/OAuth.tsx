@@ -31,7 +31,8 @@ export default function OAuth() {
             const res = await fetch(buildPath("api/auth/google"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ idToken })
+                body: JSON.stringify({ idToken }),
+                credentials: 'include' // Send cookies for authentication
             });
             const data = await res.json();
 
@@ -40,10 +41,7 @@ export default function OAuth() {
                 return;
             }
 
-            // Save JWT + user
-            localStorage.setItem("token", data.token);
-            localStorage.setItem("user", JSON.stringify(data.user));
-
+            // Cookie is set by backend, just navigate
             navigate("/dashboard");
         } catch (err) {
             alert("Google login failed. Please try again.");

@@ -102,14 +102,13 @@ export async function login(req: Request, res: Response) {
       JWT_EXPIRATION
     );
 
-    const httpsEnabled = process.env.PRODUCTION === "true" ? true : false;
+    const isProd = process.env.PRODUCTION === "true";
 
-    // Returning token in a http-only cookie
     res.cookie("token", token, {
       httpOnly: true,
-      secure: httpsEnabled, // Set to true in production (requires HTTPS)
-      sameSite: "lax", // for cross-origin requests from frontend
-      maxAge: 60 * 60 * 1000, // 1 hour
+      secure: isProd,                 // only true in production
+      sameSite: isProd ? "none" : "lax",   // lax for localhost
+      maxAge: 60 * 60 * 1000
     });
 
     return res.status(HTTPStatusCodes.OK).json({
@@ -263,13 +262,13 @@ export async function verifyEmail(req: Request, res: Response) {
       JWT_EXPIRATION
     );
 
-    const httpsEnabled = process.env.PRODUCTION === "true" ? true : false;
-    // Returning token in a http-only cookie
+    const isProd = process.env.PRODUCTION === "true";
+
     res.cookie("token", token, {
       httpOnly: true,
-      secure: httpsEnabled, // Set to true in production (requires HTTPS)
-      sameSite: "lax",
-      maxAge: 60 * 60 * 1000 // 1 hour
+      secure: isProd,                 // only true in production
+      sameSite: isProd ? "none" : "lax",   // lax for localhost
+      maxAge: 60 * 60 * 1000
     });
 
     return res.status(HTTPStatusCodes.OK).json({
@@ -343,14 +342,13 @@ export async function googleOAuth(req: Request, res: Response) {
       JWT_EXPIRATION
     );
 
-    const httpsEnabled = process.env.PRODUCTION === "true" ? true : false;
+    const isProd = process.env.PRODUCTION === "true";
 
-    // Returning token in a http-only cookie
     res.cookie("token", token, {
       httpOnly: true,
-      secure: httpsEnabled, // Set to true in production (requires HTTPS)
-      sameSite: "lax",
-      maxAge: 60 * 60 * 1000, // 1 hour
+      secure: isProd,                 // only true in production
+      sameSite: isProd ? "none" : "lax",   // lax for localhost
+      maxAge: 60 * 60 * 1000
     });
 
     return res.status(HTTPStatusCodes.OK).json({
@@ -408,4 +406,28 @@ export async function resendVerification(req: Request, res: Response) {
     console.error("Error in resend verification:", err);
     return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: "Server error" });
   }
+}
+
+
+// GET /api/auth/me
+export async function getCurrentUser(req: Request, res: Response) {
+
+  // Prevent caching of this route
+  res.set('Cache-Control', 'no-store');
+  res.set('ETag', '0');
+
+  const user = (req as any).user;
+
+  if (!user) {
+    return res.status(401).json({ authenticated: false });
+  }
+
+  return res.status(200).json({
+    authenticated: true,
+    user: {
+      id: user._id,
+      username: user.username,
+      email: user.email
+    }
+  });
 }

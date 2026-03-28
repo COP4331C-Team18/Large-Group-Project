@@ -1,3 +1,4 @@
+/*
 import {Navigate, Outlet} from 'react-router-dom';
 
 
@@ -11,7 +12,27 @@ export const PrivateRoutes = () => {
 
 export default PrivateRoutes;
 
-/*  COOKIES OPTION WITH API AUTHENTICATION
+*/
+
+// const app_name = 'inkboard.xyz';
+
+function buildPath(route:string) : string
+{
+  if (import.meta.env.MODE != 'development')
+  {
+    // Production: Point to the secure domain, NO port 5000!
+    // The leading slash ensures it attaches to the root domain.
+    return '/' + route; 
+  }
+  else
+  {
+    // Local Development remains unchanged
+    return 'http://localhost:5000/' + route;
+  }
+}
+
+
+/*  COOKIES OPTION WITH API AUTHENTICATION */
 import { useState, useEffect } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import axios from 'axios';
@@ -23,7 +44,7 @@ export const PrivateRoutes = () => {
         const checkAuth = async () => {
             try {
                 // withCredentials: true ensures the HttpOnly cookie is sent to the server
-                const response = await axios.get('API_ENDPOINT_HERE', { 
+                const response = await axios.get(buildPath('api/auth/me'), { 
                     withCredentials: true 
                 });
                 //server sends a json and sets authenticated field to true after confirms the user is authenticated
@@ -53,6 +74,3 @@ export const PrivateRoutes = () => {
 };
 
 export default PrivateRoutes;
-
-
-*/
