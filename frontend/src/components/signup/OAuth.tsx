@@ -3,7 +3,7 @@ declare const google: any;
 
 
 import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import {useAuth} from '@/contexts/AuthContext';
 
 // const app_name = 'inkboard.xyz';
 
@@ -23,7 +23,7 @@ function buildPath(route:string) : string
 
 
 export default function OAuth() {
-    const navigate = useNavigate();
+    const { login } = useAuth();
 
     const handleGoogleResponse = async (response: any) => {
         const idToken = response.credential;
@@ -31,7 +31,8 @@ export default function OAuth() {
             const res = await fetch(buildPath("api/auth/google"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ idToken })
+                body: JSON.stringify({ idToken }),
+                credentials: 'include' // Send cookies for authentication
             });
             const data = await res.json();
 
@@ -40,11 +41,9 @@ export default function OAuth() {
                 return;
             }
 
-            // Save JWT + user
-            localStorage.setItem("token", data.token);
-            localStorage.setItem("user", JSON.stringify(data.user));
-
-            navigate("/dashboard");
+            // Cookie is set by backend, just navigate
+            // Update global context state so other components know we are logged in
+            login(data.user); // navigate to dashboard after login
         } catch (err) {
             alert("Google login failed. Please try again.");
         }

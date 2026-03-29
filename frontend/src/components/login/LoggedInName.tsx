@@ -1,22 +1,19 @@
-import { useNavigate } from 'react-router-dom';
+import {useAuth} from '@/contexts/AuthContext';
 
 export default function LoggedInName() {
-  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  if(!user) return null; // If no user, don't render anything
+
   
-  // Safely get user data
-  const ud = localStorage.getItem('user_data');
-  const user = ud ? JSON.parse(ud) : { firstName: '', lastName: '' };
-
-  const doLogout = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    localStorage.removeItem("user_data");
-    navigate('/'); 
-  };
-
   return (
     <div id="loggedInDiv">
-      <span id="userName">Logged In As {user.firstName} {user.lastName}</span><br />
-      <button type="button" id="logoutButton" className="buttons" onClick={doLogout}> Log Out </button>
+      <span id="userName">
+        Logged In As {user.username}
+      </span>
+      <br />
+      <button type="button" id="logoutButton" className="buttons" onClick={logout}>
+        Log Out
+      </button>
     </div>
   );
 }

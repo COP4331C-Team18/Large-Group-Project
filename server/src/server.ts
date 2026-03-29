@@ -2,17 +2,40 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import http from 'http';
-// Change these:
-import connectDB from './config/db';
-import authRoutes from './api/authRoutes';
-import userRoutes from './api/userRoutes';
-import boardRoutes from './api/boardRoutes';
+import cookieParser from 'cookie-parser';
+import rateLimiter from './middleware/rateLimiter.js';
+
+import connectDB from './config/db.js';
+
+
+import authRoutes from './routers/authRoutes.js';
+import userRoutes from './routers/userRoutes.js';
+import boardRoutes from './routers/boardRoutes.js';
 
 const app = express();
-app.use(cors());
+
+const corsOptions = {
+    origin: 'http://localhost:5173',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
+/*
+// Required for cookies to work cross-origin
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Credentials", "true");
+  next();
+});
+
+*/
 app.use(express.json());
+app.use(cookieParser());
+app.use(rateLimiter);
 
 connectDB();
+
 
 
 app.use('/api/auth', authRoutes);

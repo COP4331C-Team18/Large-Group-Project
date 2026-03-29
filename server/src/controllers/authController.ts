@@ -63,7 +63,7 @@ async function sendVerificationEmail(email: string, code: string, expirationMins
 // POST /api/auth/login
 /*
   Request:  { login: string, password: string }
-  Success:  { message, token, user: { id, username, email } }
+  Success:  { message, user: { id, username, email } } // token is sent in http-only cookie
   Error:    { error: string }
 */
 export async function login(req: Request, res: Response) {
@@ -102,9 +102,17 @@ export async function login(req: Request, res: Response) {
       JWT_EXPIRATION
     );
 
+    const isProd = process.env.PRODUCTION === "true";
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: isProd,                 // only true in production
+      sameSite: isProd ? "none" : "lax",   // lax for localhost
+      maxAge: 60 * 60 * 1000
+    });
+
     return res.status(HTTPStatusCodes.OK).json({
       message: "Login successful",
-      token,
       user: { id: user._id, username: user.username, email: user.email },
     });
   } catch (err) {
@@ -215,7 +223,7 @@ export async function signup(req: Request, res: Response) {
 // POST /api/auth/verify-email
 /*
   Request:  { email: string, verificationCode: string }
-  Success:  { message, token, user: { id, username, email } }
+  Success:  { message, user: { id, username, email } } // token is sent in http-only cookie
   Error:    { error: string }
 */
 export async function verifyEmail(req: Request, res: Response) {
@@ -254,9 +262,17 @@ export async function verifyEmail(req: Request, res: Response) {
       JWT_EXPIRATION
     );
 
+    const isProd = process.env.PRODUCTION === "true";
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: isProd,                 // only true in production
+      sameSite: isProd ? "none" : "lax",   // lax for localhost
+      maxAge: 60 * 60 * 1000
+    });
+
     return res.status(HTTPStatusCodes.OK).json({
       message: "Email verified successfully",
-      token,
       user: { id: user._id, username: user.username, email: user.email },
     });
   } catch (err) {
@@ -268,7 +284,7 @@ export async function verifyEmail(req: Request, res: Response) {
 // POST /api/auth/google
 /*
   Request:  { idToken: string }
-  Success:  { message, token, user: { id, username, email } }
+  Success:  { message, user: { id, username, email } } // token is sent in http-only cookie
   Error:    { error: string }
 */
 export async function googleOAuth(req: Request, res: Response) {
@@ -326,9 +342,17 @@ export async function googleOAuth(req: Request, res: Response) {
       JWT_EXPIRATION
     );
 
+    const isProd = process.env.PRODUCTION === "true";
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: isProd,                 // only true in production
+      sameSite: isProd ? "none" : "lax",   // lax for localhost
+      maxAge: 60 * 60 * 1000
+    });
+
     return res.status(HTTPStatusCodes.OK).json({
       message: "Google login successful",
-      token,
       user: { id: user._id, username: user.username, email: user.email },
     });
   } catch (err: any) {
@@ -382,4 +406,40 @@ export async function resendVerification(req: Request, res: Response) {
     console.error("Error in resend verification:", err);
     return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: "Server error" });
   }
+}
+
+
+// GET /api/auth/me
+export async function getCurrentUser(req: Request, res: Response) {
+
+  // Prevent caching of this route
+  res.set('Cache-Control', 'no-store');
+  res.set('ETag', '0');
+
+  const user = (req as any).user;
+
+  if (!user) {
+    return res.status(401).json({ authenticated: false });
+  }
+
+  return res.status(200).json({
+    authenticated: true,
+    user: {
+      id: user._id,
+      username: user.username,
+      email: user.email
+    }
+  });
+}
+
+// POST /api/auth/logout
+export function logout(req: Request, res: Response) {
+  const isProd = process.env.PRODUCTION === "true";
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
+    path: "/",
+  });
+  return res.status(200).json({ message: "Logged out" });
 }
