@@ -3,7 +3,7 @@ declare const google: any;
 
 
 import { useEffect } from "react";
-import {useAuth} from '@/context/AuthContext';
+import {useAuth} from '@/config/AuthContext';
 
 // const app_name = 'inkboard.xyz';
 

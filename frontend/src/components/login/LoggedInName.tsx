@@ -1,5 +1,4 @@
-
-import {useAuth} from '@/context/AuthContext';
+import {useAuth} from '@/config/AuthContext';
 
 export default function LoggedInName() {
   const { user, logout } = useAuth();

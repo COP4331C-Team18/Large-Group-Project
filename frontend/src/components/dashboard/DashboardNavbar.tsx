@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'; // <-- Import useNavigate
 import { UserCircle, Settings, LogOut } from 'lucide-react';
 import InkcapLogo from '@/components/common/InkcapLogo';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/config/AuthContext';
 
 export default function DashboardNavBar() {
   const {logout} = useAuth();

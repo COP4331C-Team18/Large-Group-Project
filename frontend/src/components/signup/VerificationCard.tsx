@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/config/AuthContext';
 
 // const app_name = 'inkboard.xyz';
 
