@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import InkcapLogo from '@/components/common/InkcapLogo';
-import { useAuth } from '@/config/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 function GitHubIcon() {
   return (

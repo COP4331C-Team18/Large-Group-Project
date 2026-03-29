@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import LoginHero from './LoginHero';
 import OAuth from '@/components/signup/OAuth';
-import { useAuth } from '@/config/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 // const app_name = 'inkboard.xyz';
 

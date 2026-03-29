@@ -1,10 +1,8 @@
 import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '@/config/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 
-// moved all of the api fetching with axios
-// and authentication state management(logged-in, logged-out, loading) into a single global context provider
-// to simplify the logic in individual components
+// moved all of the api fetching and logic to the AuthContext, so this is just a simple wrapper now
 export const PrivateRoutes = () => {
     const { user, loading } = useAuth();
 

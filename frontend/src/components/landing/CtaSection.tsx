@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/config/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 
 function GitHubIcon() {

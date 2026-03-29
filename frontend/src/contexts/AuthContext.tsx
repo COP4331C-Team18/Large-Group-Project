@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
-// Utility for API paths
+
 export const buildPath = (route: string): string => {
   if (import.meta.env.MODE !== 'development') {
     return '/' + route;
@@ -48,11 +48,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     checkSession();
   }, []);
 
+  // Login handler to update context state and navigate to dashboard
   const login = (userData: User) => {
     setUser(userData);
     navigate('/dashboard');
   };
 
+  // Logout handler to clear session and update context state and navigate to login
   const logout = async () => {
     try {
       await axios.post(buildPath('api/auth/logout'), {}, { withCredentials: true });
@@ -71,6 +73,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
+// Custom hook, everything in main.tsx must be wrapped in <AuthProvider> to use this
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) throw new Error("useAuth must be used within an AuthProvider");
