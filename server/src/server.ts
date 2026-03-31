@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import dotenv from "dotenv";
+dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import http from 'http';
@@ -16,11 +17,10 @@ connectDB();
 
 
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 // Can be uncommented when these routes are implemented (mainly CRUD stuff + board related stuff)
-/*
-    app.use('/api/users', userRoutes);
-    app.use('/api/boards', boardRoutes);
-*/
+//app.use('/api/boards', boardRoutes);
+
 const server = http.createServer(app);
 
 const PORT = process.env.PORT;
