@@ -1,8 +1,5 @@
 import React from "react";
 
-
-
-
 export interface InkBoardCardProps {
   title: string;
   editedAt: string;
