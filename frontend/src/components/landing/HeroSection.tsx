@@ -44,19 +44,18 @@ export default function HeroSection() {
     <section
       className="
         relative min-h-screen flex flex-col items-center justify-center
-        pt-28 pb-20 px-8 overflow-hidden bg-stem-bg
+        pt-28 pb-20 px-8 overflow-hidden bg-base-100
       "
     >
       {/* Bottom green-fade overlay */}
       <div
-        className="absolute bottom-0 left-0 right-0 h-48 pointer-events-none z-[1]"
-        style={{ background: 'linear-gradient(to top, rgba(74,90,58,0.07), transparent)' }}
+        className="absolute bottom-0 left-0 right-0 h-48 pointer-events-none z-[1] bg-gradient-to-t from-[#4a5a3a12] to-transparent"
+        
       />
 
       {/* Large inkcap — right side */}
       <div
-        className="absolute bottom-[-20px] right-[4%] z-[2] pointer-events-none opacity-[0.14]"
-        style={{ width: 'clamp(260px, 34vw, 540px)' }}
+        className="absolute bottom-[-20px] right-[4%] z-[2] pointer-events-none opacity-[0.14] w-[clamp(260px,34vw,540px)]"
         aria-hidden="true"
       >
         <MushroomLarge />
@@ -64,8 +63,7 @@ export default function HeroSection() {
 
       {/* Small inkcap — left side (mirrored) */}
       <div
-        className="absolute bottom-[-10px] left-[3%] z-[2] pointer-events-none opacity-[0.08] scale-x-[-1]"
-        style={{ width: 'clamp(140px, 17vw, 280px)' }}
+        className="absolute bottom-[-10px] left-[3%] z-[2] pointer-events-none opacity-[0.08] scale-x-[-1] w-[clamp(140px,17vw,280px)]"
         aria-hidden="true"
       >
         <MushroomSmall />
@@ -75,21 +73,21 @@ export default function HeroSection() {
       <div className="relative z-[4] text-center max-w-[800px]">
 
         {/* Eyebrow */}
-        <p className="inline-flex items-center gap-3 font-sans text-[0.68rem] font-semibold tracking-[0.28em] uppercase text-moss-light mb-8">
-          <span className="block w-8 h-px bg-moss-dim" />
+        <p className="inline-flex items-center gap-3 font-sans text-[0.68rem] font-semibold tracking-[0.28em] uppercase text-primary/80 mb-8">
+          <span className="block w-8 h-px bg-primary/80" />
           Live collaborative whiteboard
-          <span className="block w-8 h-px bg-moss-dim" />
+          <span className="block w-8 h-px bg-primary/80" />
         </p>
 
         {/* Headline */}
-        <h1 className="font-serif text-[clamp(3.2rem,8.5vw,7rem)] font-bold leading-[0.95] tracking-[-0.03em] text-ink mb-7">
+        <h1 className="font-serif text-[clamp(3.2rem,8.5vw,7rem)] font-bold leading-[0.95] tracking-[-0.03em] text-base-content mb-7">
           Where ideas<br />
-          <em className="text-moss italic">flow like</em>{' '}
-          <span className="text-cap">ink.</span>
+          <em className="text-primary italic">flow like</em>{' '}
+          <span className="text-base-content">ink.</span>
         </h1>
 
         {/* Sub */}
-        <p className="font-sans text-[1.1rem] font-light text-soil-light max-w-[480px] mx-auto mb-11 leading-[1.75]">
+        <p className="font-sans text-[1.1rem] font-light text-base-content/60 max-w-[480px] mx-auto mb-11 leading-[1.75]">
           InkBoard is a real-time digital whiteboard for teams. Sketch, annotate, and
           plan together — share a 6-digit code and anyone joins instantly.
         </p>
@@ -98,12 +96,12 @@ export default function HeroSection() {
         <div
           className="
             inline-flex flex-col items-center gap-4
-            bg-white border border-[rgba(74,90,58,0.28)] border-t-[3px] border-t-cap
+            bg-base-300 border border-primary border-t-[3px] border-primary/80
             rounded px-9 py-6
             shadow-[0_4px_20px_rgba(42,45,46,0.08)]
           "
         >
-          <p className="font-sans text-[0.66rem] font-semibold tracking-[0.2em] uppercase text-soil-light">
+          <p className="font-sans text-[0.66rem] font-semibold tracking-[0.2em] uppercase text-base-content/80">
             Have a room code? Join instantly
           </p>
 
@@ -111,22 +109,21 @@ export default function HeroSection() {
           <div className="flex items-center gap-[0.4rem]">
             {['4', '8', '2', null, '9', '1', '7'].map((d, i) =>
               d === null ? (
-                <span key={i} className="text-mist text-base w-3 text-center">·</span>
+                <span key={i} className="text-primary-content w-3 text-center">·</span>
               ) : (
                 <div
                   key={i}
                   className="
-                    relative w-10 h-[52px] bg-stem-bg
-                    border border-[rgba(74,90,58,0.28)] rounded-[3px]
+                    relative w-10 h-[52px] bg-base-100
+                    border border-primary rounded-[3px]
                     flex items-center justify-center
-                    font-serif text-2xl font-semibold text-cap
+                    font-serif text-2xl font-semibold text-base-content
                   "
                 >
                   {d}
                   {/* Mini drip */}
                   <span
-                    className="absolute left-1/2 -translate-x-1/2 w-[3px] h-[6px] bg-cap rounded-b-full opacity-30"
-                    style={{ bottom: '-7px' }}
+                    className="absolute left-1/2 -translate-x-1/2 w-[3px] h-[6px] bg-primary rounded-b-full opacity-30 top-full"
                   />
                 </div>
               )
@@ -139,11 +136,11 @@ export default function HeroSection() {
             className="
               w-full flex items-center justify-center gap-2
               font-sans text-[0.72rem] font-semibold tracking-[0.1em] uppercase
-              text-moss bg-[rgba(74,90,58,0.07)]
-              border border-[rgba(74,90,58,0.28)] rounded-[3px]
+              text-primary-content bg-primary/60
+              border border-primary rounded-[3px]
               px-6 py-[0.55rem]
               transition-colors duration-200
-              hover:bg-[rgba(74,90,58,0.14)] hover:border-moss-dim hover:text-forest
+              hover:bg-primary/90 hover:border-primary/40 hover:text-primary-content
             "
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

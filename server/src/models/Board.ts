@@ -19,8 +19,14 @@ export interface BoardDocument extends Document {
 	/** Convenience alias for MongoDB's _id (string). */
 	boardId?: string;
 	title: string;
+	/** Optional description of the board. */
+	description: string;
+	/** The category of the board (e.g. "Work", "Education", "General"). */
+	category: string;
+	/** 6-digit access code for joining the board. */
+	joinCode: string;
 	/** Reference to the user who created it (even if everyone is effectively an owner). */
-	ownerId: Types.ObjectId;
+	owner: Types.ObjectId;
 	/** The latest Yjs state/update blob for fast loading. */
 	yjsUpdate: Buffer;
 	/** Base64 or URL for dashboard preview image. */
@@ -48,7 +54,25 @@ const boardSchema = new Schema<BoardDocument>(
 			trim: true,
 			maxlength: 120,
 		},
-		ownerId: {
+		description: {
+			type: String,
+			default: "",
+			trim: true,
+			maxlength: 500,
+		},
+		category: {
+			type: String,
+			default: "General",
+			trim: true,
+		},
+		joinCode: {
+			type: String,
+			required: false,
+			unique: true,
+			index: true,
+			sparse: true,
+		},
+		owner: {
 			type: Schema.Types.ObjectId,
 			ref: "User",
 			required: true,
@@ -56,7 +80,7 @@ const boardSchema = new Schema<BoardDocument>(
 		},
 		yjsUpdate: {
 			type: Buffer,
-			required: true,
+			required: false,
 			default: () => Buffer.from([]),
 		},
 		thumbnail: {
@@ -90,7 +114,7 @@ boardSchema.virtual("boardId").get(function (this: BoardDocument) {
 });
 
 // Hard cap revision history to last 100 entries.
-boardSchema.pre("save", function () {
+boardSchema.pre<BoardDocument>("save", function () {
 	if (Array.isArray(this.revisions) && this.revisions.length > 100) {
 		this.revisions = this.revisions.slice(-100);
 	}

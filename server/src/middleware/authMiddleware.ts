@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyAccessToken } from '../utils/jwtUtils';
-import { HTTPStatusCodes } from '../utils/statusCodes';
+import { verifyAccessToken } from '../utils/jwtUtils.js';
+import { HTTPStatusCodes } from '../utils/statusCodes.js';
 
 // Extend the standard Express Request so TypeScript knows we are adding a 'user' property
 export interface AuthRequest extends Request {

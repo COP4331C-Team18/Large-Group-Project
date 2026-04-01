@@ -7,11 +7,11 @@ import { HTTPStatusCodes } from '../utils/statusCodes.js';
 // PROTECTED: Fetches only the boards owned by the logged-in user
 export const getMyBoards = async (req: AuthRequest, res: Response) => {
   try {
-    // req.user is attached by the authenticateToken middleware
-    const userId = req.user?.id;
+    // req.user is attached by the protect middleware
+    const userId = req.user?._id;
     
     if (!userId) {
-      return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: 'User ID missing from token' });
+      return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: 'User ID missing' });
     }
 
     // Find all boards owned by this user, newest first
@@ -53,12 +53,12 @@ const generateJoinCode = () => Math.floor(100000 + Math.random() * 900000).toStr
 // PROTECTED: Creates a new board for the logged-in user
 export const createBoard = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?._id;
     if (!userId) {
       return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: 'Unauthorized' });
     }
 
-    const { title = 'Untitled Board', category = 'General' } = req.body;
+    const { title = 'Untitled Board', description = '', category = 'General' } = req.body;
 
     let joinCode = generateJoinCode();
     let isUnique = false;
@@ -76,6 +76,7 @@ export const createBoard = async (req: AuthRequest, res: Response) => {
     // Create and save the new board
     const newBoard = new Board({
       title,
+      description,
       category,
       owner: userId,
       joinCode
@@ -84,8 +85,69 @@ export const createBoard = async (req: AuthRequest, res: Response) => {
     await newBoard.save();
 
     return res.status(HTTPStatusCodes.CREATED).json(newBoard);
-  } catch (err) {
+  } catch (err: any) {
     console.error("Error creating board:", err);
-    return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Server error creating board' });
+    return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ 
+      error: 'Server error creating board',
+      details: err.message,
+      stack: err.stack
+    });
+  }
+};
+
+// PUT /api/boards/:id
+// PROTECTED: Updates a board's details
+export const updateBoard = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    const { title, description, category } = req.body;
+
+    // Find the board and make sure the current user is the owner
+    const board = await Board.findOne({ _id: id, owner: userId });
+
+    if (!board) {
+      return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: 'Board not found or unauthorized' });
+    }
+
+    if (title !== undefined) board.set('title', title);
+    if (description !== undefined) board.set('description', description);
+    if (category !== undefined) board.set('category', category);
+
+    await board.save();
+
+    return res.status(HTTPStatusCodes.OK).json(board);
+  } catch (err) {
+    console.error("Error updating board:", err);
+    return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Server error updating board' });
+  }
+};
+
+// DELETE /api/boards/:id
+// PROTECTED: Deletes a board
+export const deleteBoard = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+
+    // Find the board and make sure the current user is the owner before deleting
+    const board = await Board.findOneAndDelete({ _id: id, owner: userId });
+
+    if (!board) {
+      return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: 'Board not found or unauthorized' });
+    }
+
+    return res.status(HTTPStatusCodes.OK).json({ message: 'Board deleted successfully' });
+  } catch (err) {
+    console.error("Error deleting board:", err);
+    return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Server error deleting board' });
   }
 };

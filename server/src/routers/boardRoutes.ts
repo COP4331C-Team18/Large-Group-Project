@@ -1,14 +1,20 @@
 import express from 'express';
-import { getMyBoards, joinBoardByCode, createBoard } from '../controllers/boardController.js';
-import { authenticateToken } from '../middleware/authMiddleware.js';
+import { getMyBoards, joinBoardByCode, createBoard, updateBoard, deleteBoard } from '../controllers/boardController.js';
+import { protect } from '../middleware/jwtProtect.js';
 
 const router = express.Router();
 
 // Protected route to fetch user's boards
-router.get('/', authenticateToken, getMyBoards);
+router.get('/', protect, getMyBoards);
 
 // Protected route to CREATE a new board
-router.post('/', authenticateToken, createBoard);
+router.post('/', protect, createBoard);
+
+// Protected route to UPDATE a board
+router.put('/:id', protect, updateBoard);
+
+// Protected route to DELETE a board
+router.delete('/:id', protect, deleteBoard);
 
 // PUBLIC route for joining via 6-digit code
 router.get('/join/:code', joinBoardByCode);
