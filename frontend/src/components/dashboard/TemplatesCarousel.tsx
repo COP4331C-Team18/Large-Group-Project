@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
-import { TEMPLATES } from '@/config/templates';
-import { templateService } from '@/api/services/templateService';
+import { CATEGORY_COLORS, TEMPLATES } from '@/config/templates';
 
 export interface CarouselProps {
   onSelect?: (templateId: string) => void;
@@ -16,7 +15,8 @@ export default function TemplatesCarousel({ onSelect }: CarouselProps) {
   useEffect(() => {
     const fetchTemplates = async () => {
       try {
-        const data = await templateService.getTemplates();
+        const response = await fetch('/api/templates');
+        const data = await response.json();
         setDbTemplates(data);
       } catch (error) {
         console.error("Using local fallback templates:", error);
@@ -41,22 +41,22 @@ export default function TemplatesCarousel({ onSelect }: CarouselProps) {
       <div className="relative px-4">
         <Search 
           size={14} 
-          className="absolute left-7 top-1/2 -translate-y-1/2 text-base-content" 
+          className="absolute left-7 top-1/2 -translate-y-1/2 text-[#A67C5288]" 
         />
         <input
           type="text"
           placeholder="Find a template..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="input input-xs w-full pl-9 bg-base-100 text-[11px] font-serif italic rounded-lg placeholder-base-content/70 focus:ring-2 focus:ring-primary focus:border-primary transition"
+          className="input input-xs w-full pl-9 bg-white/40 border-[#A67C5244] focus:border-[#A67C52] text-[11px] font-serif italic rounded-lg placeholder-[#A67C5266]"
         />
       </div>
 
       {/* Scrollable Carousel Area */}
-      <div className="carousel carousel-center carousel-vertical flex flex-col w-full py-3 space-y-6 flex-1">
+      <div className="carousel carousel-center carousel-vertical flex flex-col w-full px-4 space-y-6 flex-1">
         {loading && filteredTemplates.length === 0 ? (
           <div className="flex justify-center py-10">
-            <span className="loading loading-spinner loading-sm text-base-content"></span>
+            <span className="loading loading-spinner loading-sm text-[#A67C52]"></span>
           </div>
         ) : filteredTemplates.length > 0 ? (
           filteredTemplates.map((template) => (
@@ -66,19 +66,21 @@ export default function TemplatesCarousel({ onSelect }: CarouselProps) {
                 className="group flex flex-col items-center gap-3 w-full"
               >
                 <div
-                  className="size-32 rounded-2xl overflow-hidden transition-all duration-300 group-hover:scale-105 group-hover:shadow-2xl bg-base-100 border border-base-300 hover:border-primary"
+                  className="size-32 rounded-2xl overflow-hidden transition-all duration-300 group-hover:scale-105 group-hover:shadow-2xl border-[1.5px] border-[#A67C5233]"
+                  style={{ background: '#F4F1EA' }}
                 >
                   {template.thumbnail ? (
                     <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center p-4">
                        <div className="flex flex-col gap-2 w-full opacity-30">
-                          <div className="h-px w-full bg-secondary" />
-                          <div className="h-px w-3/4 bg-secondary" />
-                          <div className="h-px w-full bg-secondary" />
+                          <div className="h-px w-full bg-[#A67C52]" />
+                          <div className="h-px w-3/4 bg-[#A67C52]" />
+                          <div className="h-px w-full bg-[#A67C52]" />
                        </div>
                        <span 
-                        className="mt-3 text-[8px] tracking-[0.2em] font-bold uppercase text-base-content/80 font-serif"
+                        className="mt-3 text-[8px] tracking-[0.2em] font-bold uppercase"
+                        style={{ color: CATEGORY_COLORS[template.category] || '#A67C52' }}
                        >
                         {template.category}
                        </span>

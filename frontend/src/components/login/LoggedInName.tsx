@@ -11,7 +11,7 @@ export default function LoggedInName() {
         Logged In As {user.username}
       </span>
       <br />
-      <button type="button" id="logoutButton" className="btn" onClick={logout}>
+      <button type="button" id="logoutButton" className="buttons" onClick={logout}>
         Log Out
       </button>
     </div>

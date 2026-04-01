@@ -1,7 +1,16 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { authService } from '@/api/services/authService';
+
+
+export const buildPath = (route: string): string => {
+  if (import.meta.env.MODE !== 'development') {
+    return '/' + route;
+  }
+  return 'http://localhost:5000/' + route;
+};
+
 interface User {
   id: string;
   username: string;
@@ -26,9 +35,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const data = await authService.me();
-        if (data.authenticated) {
-          setUser(data.user);
+        const res = await axios.get(buildPath('api/auth/me'), { withCredentials: true });
+        if (res.data.authenticated) {
+          setUser(res.data.user);
         }
       } catch (err) {
         setUser(null);
@@ -48,7 +57,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Logout handler to clear session and update context state and navigate to login
   const logout = async () => {
     try {
-      await authService.logout();
+      await axios.post(buildPath('api/auth/logout'), {}, { withCredentials: true });
     } catch (err) {
       console.error("Logout error", err);
     } finally {
