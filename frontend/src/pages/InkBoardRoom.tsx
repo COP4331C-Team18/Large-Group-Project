@@ -14,7 +14,7 @@
 //     Space (hold)=pan mode, +/-=zoom, 0=fit
 
 import {
-  useEffect, useRef, useState, useCallback,
+  useEffect, useLayoutEffect, useRef, useState, useCallback,
 } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
@@ -60,7 +60,7 @@ function buildPath(route: string): string {
   return import.meta.env.MODE !== 'development'
     ? `https://inkboard.xyz/${route}`
     : `http://localhost:5000/${route}`;
-}
+} 
 
 const PALETTE = [
   '#111410', '#2D3A27', '#4A5D3F', '#7A9E6E',
@@ -71,7 +71,7 @@ const PALETTE = [
 const SNAPSHOT_DEBOUNCE_MS = 20_000;
 const MIN_SCALE = 0.05;
 const MAX_SCALE = 20;
-const ZOOM_SENSITIVITY = 0.0012;
+// const ZOOM_SENSITIVITY = 0.0012;
 
 // ── ID generator ──────────────────────────────────────────────────────────────
 let _idCounter = 0;
@@ -180,7 +180,6 @@ export default function WhiteboardRoom() {
   // Canvas refs
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const initialCenterDone = useRef(false);
 
   // Viewport (pan + zoom) — stored in a ref for perf, mirrored to state for zoom display
   const vpRef = useRef<Viewport>({ x: 0, y: 0, scale: 1 });
@@ -272,34 +271,37 @@ export default function WhiteboardRoom() {
   }, [render]);
 
   // ── Canvas resize ────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const wrapper = wrapperRef.current;
-    const canvas = canvasRef.current;
-    if (!wrapper || !canvas) return;
+  useLayoutEffect(() => {
+    let centered = false;
 
-    const ro = new ResizeObserver(entries => {
-      for (const e of entries) {
-        const { width, height } = e.contentRect;
-        
-        // Require a minimum size (e.g., > 10px) to ignore split-second intermediate frames
-        if (width > 10 && height > 10) {
-          canvas.width = Math.floor(width);
-          canvas.height = Math.floor(height);
-          
-          // Center exactly once, only after the wrapper has actual dimensions
-          if (!initialCenterDone.current) {
-            vpRef.current.x = canvas.width / 2;
-            vpRef.current.y = canvas.height / 2;
-            initialCenterDone.current = true;
-          }
-          
-          markDirty();
-        }
-      } 
-    });
-    ro.observe(wrapper);
-    return () => ro.disconnect();
-  }, [markDirty]);
+    function sizeCanvas() {
+      const cv = canvasRef.current;
+      const wr = wrapperRef.current;
+      if (!cv || !wr) return;
+      const { width, height } = wr.getBoundingClientRect();
+      if (width < 10 || height < 10) return;
+      cv.width = Math.floor(width);
+      cv.height = Math.floor(height);
+      if (!centered) {
+        vpRef.current.x = cv.width / 2;
+        vpRef.current.y = cv.height / 2;
+        centered = true;
+      }
+      needsRender.current = true;
+    }
+
+    sizeCanvas(); // runs synchronously after DOM paint — refs guaranteed valid
+
+    const ro = new ResizeObserver(sizeCanvas);
+    const wr = wrapperRef.current;
+    if (wr) ro.observe(wr);
+
+    window.addEventListener('resize', sizeCanvas);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', sizeCanvas);
+    };
+  }, [loading]); // re-runs when loading finishes and canvas enters the DOM
 
   // ── Snapshot ─────────────────────────────────────────────────────────────────
   const scheduleSnapshot = useCallback((bId: string) => {
@@ -660,29 +662,22 @@ export default function WhiteboardRoom() {
     e.preventDefault();
     const { sx, sy } = getCanvasPos(e.nativeEvent);
 
-    if (e.ctrlKey || e.metaKey) {
-      // Pinch-zoom on trackpad (ctrl+wheel)
-      zoomAt(sx, sy, -e.deltaY * ZOOM_SENSITIVITY * 5);
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY) * 0.5) {
+      // Two-finger horizontal trackpad swipe → pan
+      vpRef.current = {
+        ...vpRef.current,
+        x: vpRef.current.x - e.deltaX,
+        y: vpRef.current.y - e.deltaY,
+      };
+      markDirty();
     } else if (e.shiftKey) {
-      // Horizontal pan
+      // Shift+scroll → horizontal pan
       vpRef.current = { ...vpRef.current, x: vpRef.current.x - e.deltaY };
       markDirty();
-    } else if (Math.abs(e.deltaX) > Math.abs(e.deltaY) * 0.5) {
-      // Natural horizontal trackpad scroll
-      vpRef.current = {
-        ...vpRef.current,
-        x: vpRef.current.x - e.deltaX,
-        y: vpRef.current.y - e.deltaY,
-      };
-      markDirty();
     } else {
-      // Scroll = pan vertically; scroll with modifier = zoom
-      vpRef.current = {
-        ...vpRef.current,
-        x: vpRef.current.x - e.deltaX,
-        y: vpRef.current.y - e.deltaY,
-      };
-      markDirty();
+      // Plain scroll wheel → zoom 5% per tick, centered on cursor
+      const direction = e.deltaY > 0 ? -1 : 1;
+      zoomAt(sx, sy, direction * 0.05);
     }
   }, [getCanvasPos, zoomAt, markDirty]);
 
