@@ -19,7 +19,7 @@ import boardRoutes from './routers/boardRoutes.js';
 import Stroke from './models/Stroke.js';
 import Board from './models/Board.js';
 
-const app = express();
+const app = express(); 
 
 const corsOptions = {
     origin: 'http://localhost:5173', // Removed trailing slash to match file (1)
