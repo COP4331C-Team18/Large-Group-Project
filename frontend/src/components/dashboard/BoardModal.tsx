@@ -4,9 +4,10 @@ import api from '../../api/axios';
 const BoardModal = () => {
   const [formData, setFormData] = useState({
     name: '',
+    description: '',
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
@@ -14,7 +15,7 @@ const BoardModal = () => {
   };
 
   // Custom function to handle submission and close modal
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     console.log("Saving Board...", formData);
@@ -23,7 +24,7 @@ const BoardModal = () => {
       await api.post('/boards', formData);
       
       // Clear form
-      setFormData({ name: '' });
+      setFormData({ name: '', description: '' });
       
       // Close modal
       const modal = document.getElementById('board_modal') as HTMLDialogElement | null;
@@ -63,6 +64,17 @@ const BoardModal = () => {
                 className="input input-bordered w-full" 
                 required 
               />
+            </div>
+
+            <div className="form-control">
+              <textarea 
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                className="textarea textarea-bordered w-full h-32" 
+                placeholder="Board Description"
+                required
+              ></textarea>
             </div>
 
             <div className="modal-action">
