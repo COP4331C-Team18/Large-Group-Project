@@ -21,6 +21,7 @@ const DashboardMain = () => {
     fetchBoards();
   }, []);
 
+
   const selectedBoard = boards.find((b: any) => String(b.id || b._id) === selectedId);
 
   return (
