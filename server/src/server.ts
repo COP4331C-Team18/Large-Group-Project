@@ -21,8 +21,18 @@ import Board from './models/Board.js';
 
 const app = express(); 
 
+// ── Security Headers & COOP ──────────────────────────────────────────────────
+app.use((req, res, next) => {
+  // Fixes the window.postMessage error for Google Login
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  // Optional: Helps with Cross-Origin resource sharing in some browsers
+  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none'); 
+  next();
+});
+
+// Update your CORS options to include your production domain
 const corsOptions = {
-    origin: 'http://localhost:5173', // Removed trailing slash to match file (1)
+    origin: ['http://localhost:5173', 'https://inkboard.xyz'], 
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization']

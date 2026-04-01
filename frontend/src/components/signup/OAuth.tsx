@@ -27,10 +27,14 @@ export default function OAuth() {
                 client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
                 callback: handleGoogleResponse
             });
-            google.accounts.id.renderButton(
-                document.getElementById("googleOAuthDiv"),
-                { theme: "outline", size: "large", width: "100%" }
-            );
+            const container = document.getElementById("googleOAuthDiv");
+            const width = container?.offsetWidth || 400;
+
+            google.accounts.id.renderButton(container, {
+            theme: "outline",
+            size: "large",
+            width: width  // pixel number, derived from actual container width
+            });
         }
     }, []);
 
