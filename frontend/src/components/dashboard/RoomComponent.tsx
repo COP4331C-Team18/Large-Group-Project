@@ -179,6 +179,8 @@ const RoomSection = () => {
         </div>
       </div>
     </div>
+    <BoardModal />
+    </>
   );
 };
 
