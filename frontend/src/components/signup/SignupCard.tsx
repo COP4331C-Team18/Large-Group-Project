@@ -4,23 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import VerificationCard from '@/components/signup/VerificationCard';
 import OAuth from '@/components/signup/OAuth';
 import { useAuth } from '@/contexts/AuthContext';
+import { authService } from '@/api/services/authService';
 
 // const app_name = 'inkboard.xyz';
-
-function buildPath(route:string) : string
-{
-  if (import.meta.env.MODE != 'development')
-  {
-    // Production: Point to the secure domain, NO port 5000!
-    // The leading slash ensures it attaches to the root domain.
-    return '/' + route; 
-  }
-  else
-  {
-    // Local Development remains unchanged
-    return 'http://localhost:5000/' + route;
-  }
-}
 
 export default function Signup() {
     const navigate = useNavigate();
@@ -91,27 +77,15 @@ export default function Signup() {
         };
 
         try {
-            const response = await fetch(buildPath('api/auth/signup'), {
-                method: 'POST',
-                body: JSON.stringify(obj),
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include' // Send cookies for authentication
-            });
-
-            const res = await response.json();
-
-            if (!response.ok) {
-                setMessage(res.error || 'An error occurred during signup');
-                return;
-            }
+            const data = await authService.signup(obj);
 
             // Signup successful, show verification card
             setMessage('');
             setShowVerification(true);
-            setSubmittedEmail(res.email); // Use the email from the response to ensure it's the one that was processed
+            setSubmittedEmail(data.email); // Use the email from the response to ensure it's the one that was processed
 
         } catch (error: any) {
-            setMessage('An error occured during signup. Please try again later.');
+            setMessage(error.response?.data?.error || 'An error occured during signup. Please try again later.');
         }
     };
 
@@ -136,43 +110,43 @@ export default function Signup() {
     // Returns JSX for the sign-up form
     return (
         <div className="relative w-full max-w-4xl mx-auto flex justify-center items-center min-h-screen p-5">
-            <div className={`card w-full max-w-md bg-white  border-primary border-t-[3px] rounded-[3px] border-t-cap p-6 sm:p-10 transition-all duration-300 ${showVerification ? 'blur-[1.5px] opacity-45 pointer-events-none select-none' : ''}`}>
+            <div className={`card w-full max-w-md bg-base-300  border-primary border-t-[3px] rounded-[3px] p-6 sm:p-10 transition-all duration-300 ${showVerification ? 'blur-[1.5px] opacity-45 pointer-events-none select-none' : ''}`}>
                 <div className="text-center mb-6">
-                    <h1 className="font-serif text-2xl font-bold leading-[0.95] mb-2 ">Welcome to <em className="text-moss italic-600">InkBoard</em>{' '}
+                    <h1 className="font-serif text-2xl font-bold leading-[0.95] mb-2 ">Welcome to <em className="text-primary italic-600">InkBoard</em>{' '}
                     </h1>
-                    <p className="text-base text-gray-600">Create an account to save your boards and collaborate with anyone</p>
+                    <p className="text-base text-primary">Create an account to save your boards and collaborate with anyone</p>
                 </div>
 
                 <div className="form-control gap-4">
                     <input type="email" placeholder="Email" value={signupEmail} onChange={handleSetSignupEmail}
                         className="w-full px-4 py-[0.7rem]
-                        font-sans text-[0.93rem] text-ink
-                        bg-stem-bg border border-[rgba(74,90,58,0.28)] rounded-[3px]
-                        placeholder:text-soil-light
+                        font-sans text-[0.93rem] text-base-content
+                        bg-base-100 border border-primary/70 rounded-[3px]
+                        placeholder:text-base-content/60        
                         outline-none
-                        focus:border-moss focus:ring-2 focus:ring-[rgba(74,90,58,0.15)]
+                        focus:border-primary focus:ring-2 focus:ring-primary/30
                         transition-all duration-150" />
                     <input type="text" placeholder="Username" value={signupName} onChange={handleSetSignupName} className="w-full px-4 py-[0.7rem]
-                        font-sans text-[0.93rem] text-ink
-                        bg-stem-bg border border-[rgba(74,90,58,0.28)] rounded-[3px]
-                        placeholder:text-soil-light
+                        font-sans text-[0.93rem] text-base-content
+                        bg-base-100 border border-primary/70 rounded-[3px]
+                        placeholder:text-base-content/60
                         outline-none
-                        focus:border-moss focus:ring-2 focus:ring-[rgba(74,90,58,0.15)]
+                        focus:border-primary focus:ring-2 focus:ring-primary/60
                         transition-all duration-150" />
                     <input type="password" placeholder="Password" value={signupPassword} onChange={handleSetSignupPassword} className="w-full px-4 py-[0.7rem]
-                        font-sans text-[0.93rem] text-ink
-                        bg-stem-bg border border-[rgba(74,90,58,0.28)] rounded-[3px]
-                        placeholder:text-soil-light
+                        font-sans text-[0.93rem] text-base-content
+                        bg-base-100 border border-primary/70 rounded-[3px]
+                        placeholder:text-base-content/60
                         outline-none
-                        focus:border-moss focus:ring-2 focus:ring-[rgba(74,90,58,0.15)]
+                        focus:border-primary focus:ring-2 focus:ring-primary/30
                         transition-all duration-150" />
                     <input type="password" placeholder="Confirm Password" value={signupConfirmPassword} onChange={handleSetSignupConfirmPassword}
                         className="w-full px-4 py-[0.7rem]
-                        font-sans text-[0.93rem] text-ink
-                        bg-stem-bg border border-[rgba(74,90,58,0.28)] rounded-[3px]
-                        placeholder:text-soil-light
+                        font-sans text-[0.93rem] text-base-content
+                        bg-base-100 border border-primary/70 rounded-[3px]
+                        placeholder:text-base-content/60
                         outline-none
-                        focus:border-moss focus:ring-2 focus:ring-[rgba(74,90,58,0.15)]
+                        focus:border-primary focus:ring-2 focus:ring-primary/30
                         transition-all duration-150" />
                 </div>
 
@@ -180,7 +154,7 @@ export default function Signup() {
                     {message}
                 </div>
 
-                <button className="btn w-full bg-[#4a5a3a] text-[#e4ddd0] hover:bg-[#2e3d28] border-none rounded-[3px] font-sans text-[0.76rem] font-semibold tracking-[0.1em] uppercase" onClick={doSignup}>
+                <button className="btn w-full bg-primary/90 text-primary-content hover:bg-primary border-none rounded-[3px] font-sans text-[0.76rem] font-semibold tracking-[0.1em] uppercase" onClick={doSignup}>
                     Create Account
                 </button>
 
@@ -189,13 +163,13 @@ export default function Signup() {
                     <OAuth />
                 </button>
 
-                <p className="font-sans text-[0.84rem] text-soil-light text-center mt-[10px] pt-1">
+                <p className="font-sans text-[0.84rem] text-base-content text-center mt-[10px] pt-1">
                     Already have an account?{' '}
                     <button
                         onClick={() => navigate('/login')}
-                        className="text-moss font-semibold
-                            border-b border-[rgba(74,90,58,0.3)] pb-px
-                            hover:border-moss transition-colors duration-150
+                        className="text-primary/70 font-semibold
+                            border-b border-primary/90 pb-px
+                            hover:border-primary transition-colors duration-150
                             bg-transparent border-x-0 border-t-0 cursor-pointer p-0"
                     >
                         Sign In

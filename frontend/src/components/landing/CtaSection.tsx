@@ -20,21 +20,21 @@ export default function CtaSection() {
       {/* ... keeping the background glow, eyebrow, headline, and subtext exactly the same ... */}
 
       <div className="relative z-10">
-        <p className="font-sans text-[0.68rem] font-semibold tracking-[0.25em] uppercase text-moss-light mb-3">
+        <p className="font-sans text-[0.68rem] font-semibold tracking-[0.25em] uppercase text-primary mb-3">
           Get started free
         </p>
-        <h2 className="font-serif text-[clamp(1.9rem,4vw,2.9rem)] font-bold leading-[1.1] tracking-[-0.02em] text-ink mb-5">
-          Your best ideas deserve <em className="italic text-moss">a finer canvas.</em>
+        <h2 className="font-serif text-[clamp(1.9rem,4vw,2.9rem)] font-bold leading-[1.1] tracking-[-0.02em] text-base-content mb-5">
+          Your best ideas deserve <em className="italic text-primary">a finer canvas.</em>
         </h2>
-        <p className="font-sans text-base text-soil-light leading-[1.7] mb-10">
+        <p className="font-sans text-base-content/60 leading-[1.7] mb-10">
           Free forever. Open source. No credit card. Just pick up the pen.
         </p>
 
         <div className="flex gap-4 justify-center flex-wrap">
-          {/* Dynamically Swap Primary CTA */}
+          {/*CTA*/}
           <button
             onClick={() => navigate(isAuthenticated ? '/dashboard' : '/signup')}
-            className="flex items-center gap-2 font-sans text-[0.78rem] font-semibold tracking-[0.1em] uppercase bg-moss text-stem-light px-9 py-[0.875rem] rounded-[3px] border-none transition-colors duration-200 hover:bg-forest"
+            className="flex items-center gap-2 font-sans text-[0.78rem] font-semibold tracking-[0.1em] uppercase bg-primary text-base-content px-9 py-[0.875rem] rounded-[3px] border-none transition-colors duration-200 hover:bg-secondary"
           >
             {isAuthenticated ? 'View Dashboard' : 'Create free account'}
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -43,7 +43,7 @@ export default function CtaSection() {
           </button>
 
           {/* GitHub ghost button */}
-          <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 font-sans text-[0.78rem] font-medium tracking-[0.08em] uppercase text-soil bg-transparent px-9 py-[0.875rem] rounded-[3px] border border-[rgba(74,90,58,0.28)] transition-colors duration-200 hover:bg-[rgba(74,90,58,0.07)] hover:text-ink hover:border-moss-dim">
+          <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 font-sans text-[0.78rem] font-medium tracking-[0.08em] uppercase text-base-content bg-transparent px-9 py-[0.875rem] rounded-[3px] border border-[rgba(74,90,58,0.28)] transition-colors duration-200 hover:bg-[rgba(74,90,58,0.07)] hover:text-ink hover:border-moss-dim">
             <GitHubIcon />
             Star on GitHub
           </a>
