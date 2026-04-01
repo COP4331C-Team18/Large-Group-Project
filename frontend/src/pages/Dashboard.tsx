@@ -5,7 +5,7 @@ import DashboardMain from '@/components/dashboard/DashboardMain';
 export default function Dashboard() {
 
   return (
-    <div className="h-screen w-full p-3 flex flex-col bg-[#ede8df] gap-3 overflow-hidden">
+    <div className="h-screen w-full p-3 flex flex-col bg-base-100 gap-3 overflow-hidden">
       
       <DashboardNavBar />
       

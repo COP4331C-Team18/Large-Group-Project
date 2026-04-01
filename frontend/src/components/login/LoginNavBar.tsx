@@ -16,8 +16,8 @@ export default function Navbar() {
         fixed top-0 left-0 right-0 z-[200]
         flex items-center justify-between gap-8
         px-12 py-4
-        bg-[rgba(237,232,223,0.93)] backdrop-blur-md
-        border-b border-[rgba(74,90,58,0.28)]
+        bg-base-200 backdrop-blur-md
+        border-b border-primary/40
       "
     >
       {/* Logo */}
@@ -26,7 +26,7 @@ export default function Navbar() {
         className="
           flex items-center gap-[0.65rem]
           font-serif text-[1.3rem] font-bold tracking-[-0.01em]
-          text-ink no-underline
+          text-base-content no-underline
         "
       >
         <InkcapLogo width={28} height={32} />
@@ -43,9 +43,9 @@ export default function Navbar() {
           className="
             flex items-center gap-[0.4rem]
             font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase
-            text-soil px-[0.9rem] py-[0.45rem] rounded
+            text-secondary px-[0.9rem] py-[0.45rem] rounded
             transition-colors duration-200
-            hover:text-ink hover:bg-[rgba(74,90,58,0.08)]
+            hover:text-base-content hover:bg-primary/10
           "
         >
           <GitHubIcon />

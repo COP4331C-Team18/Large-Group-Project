@@ -16,9 +16,9 @@ export default function Footer() {
   const isAuthenticated = !!user;
 
   return (
-    <footer className="border-t border-[rgba(74,90,58,0.28)] px-12 py-8 flex items-center justify-between flex-wrap gap-4" style={{ background: '#e4ddd0' }}>
+    <footer className="border-t border-primary/30 px-12 py-8 flex items-center justify-between flex-wrap gap-4 bg-base-300">
       {/* Logo */}
-      <a href="/" className="flex items-center gap-2 font-serif text-base font-bold text-ink no-underline">
+      <a href="/" className="flex items-center gap-2 font-serif font-bold text-base-content no-underline">
         <InkcapLogo width={22} height={25} />
         InkBoard
       </a>
@@ -28,7 +28,7 @@ export default function Footer() {
         {isAuthenticated ? (
            <button
              onClick={() => navigate('/dashboard')}
-             className="flex items-center gap-[0.35rem] font-sans text-[0.72rem] font-medium tracking-[0.06em] uppercase text-soil-light transition-colors duration-200 hover:text-ink bg-transparent border-none cursor-pointer p-0"
+             className="flex items-center gap-[0.35rem] font-sans text-[0.72rem] font-medium tracking-[0.06em] uppercase text-secondary transition-colors duration-200 hover:text-base-content bg-transparent border-none cursor-pointer p-0"
            >
              View Dashboard
            </button>
@@ -36,19 +36,19 @@ export default function Footer() {
           <>
             <button
               onClick={() => navigate('/login')}
-              className="flex items-center gap-[0.35rem] font-sans text-[0.72rem] font-medium tracking-[0.06em] uppercase text-soil-light transition-colors duration-200 hover:text-ink bg-transparent border-none cursor-pointer p-0"
+              className="flex items-center gap-[0.35rem] font-sans text-[0.72rem] font-medium tracking-[0.06em] uppercase text-secondary/90 transition-colors duration-200 hover:text-base-content bg-transparent border-none cursor-pointer p-0"
             >
               Log in
             </button>
             <button
               onClick={() => navigate('/signup')}
-              className="flex items-center gap-[0.35rem] font-sans text-[0.72rem] font-medium tracking-[0.06em] uppercase text-soil-light transition-colors duration-200 hover:text-ink bg-transparent border-none cursor-pointer p-0"
+              className="flex items-center gap-[0.35rem] font-sans text-[0.72rem] font-medium tracking-[0.06em] uppercase text-secondary/90 transition-colors duration-200 hover:text-base-content bg-transparent border-none cursor-pointer p-0"
             >
               Sign up
             </button>
           </>
         )}
-        <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-[0.35rem] font-sans text-[0.72rem] font-medium tracking-[0.06em] uppercase text-soil-light transition-colors duration-200 hover:text-ink no-underline">
+        <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-[0.35rem] font-sans text-[0.72rem] font-medium tracking-[0.06em] uppercase text-secondary/90 transition-colors duration-200 hover:text-base-content no-underline">
           <GitHubIcon />
           GitHub
         </a>

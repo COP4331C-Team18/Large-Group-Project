@@ -1,22 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { authService } from '@/api/services/authService';
 
 // const app_name = 'inkboard.xyz';
-
-function buildPath(route:string) : string
-{
-  if (import.meta.env.MODE != 'development')
-  {
-    // Production: Point to the secure domain, NO port 5000!
-    return '/' + route; 
-  }
-  else
-  {
-    // Local Development remains unchanged
-    return 'http://localhost:5000/' + route;
-  }
-}
-
 interface VerificationCardProp {
     email: string;
     onReturn: () => void;
@@ -107,32 +93,20 @@ export default function Verification({ email, onReturn }: VerificationCardProp) 
     };
 
     const submitCode = async (fullCode: string) => {
-        setResendMessage('');
+        setResendMessage(''); // Clear resend messages on new submission
+        setMessage(''); // Clear previous messages
 
         try {
-            const response = await fetch(buildPath('api/auth/verify-email'), {
-                method: 'POST',                
-                body: JSON.stringify({ 
-                    email, 
-                    verificationCode: fullCode  // changing payload fields to match the backend function
-                }),  
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include' // Send cookies for authentication
-            });
-            const res = await response.json();
-
-            if (!response.ok) {
-                // if verification fails, show error message and reset code input
-                setMessage( res.error || 'Verification failed. Please try again.'); 
-                setCode(['', '', '', '', '', '']);
-                setTimeout(() => inputRefs.current[0]?.focus(), 3000);
-                return;
-            }
+            const data = await authService.verifyEmail(email, fullCode);
             
-            // update global context and navigate to dashboard on successful verification
-            login(res.user); // update context with logged in user
+            login(data.user); // update context with logged in user
         } catch (error: any) {
-            setMessage('Verification failed. Please try again.');
+            // Response == Failure here
+            const errMsg = error.response?.data?.error || 'Verification failed. Please try again.';
+            // Set error message and reset code inputs
+            setMessage(errMsg);
+            setCode(['', '', '', '', '', '']);
+            setTimeout(() => {inputRefs.current[0]?.focus();}, 1000);
         }
     };
 
@@ -140,22 +114,14 @@ export default function Verification({ email, onReturn }: VerificationCardProp) 
         setMessage('');
         setResendMessage('');
         try {
-            const response = await fetch(buildPath('api/auth/resend-verification'), {
-                method: 'POST',
-                body: JSON.stringify({ email }),
-                headers: { 'Content-Type': 'application/json' }
-            });
-            const res = await response.json();
+            const data = await authService.resendVerification(email);
 
-            if (res.error) {
-                setMessage('Failed to resend. Please try again.');
-            }
-            else {
-                setResendMessage('Verification code resent. Please check your email.');
-                setTimeout(() => setResendMessage(''), 3000);
-            }
-        } catch {
-            setMessage('Failed to resend. Please try again.');
+            setResendMessage(data.message);
+            setTimeout(() => setResendMessage(''), 3000);
+        } catch (error: any) {
+            const errorMsg = error.response?.data?.error || 'Failed to resend code. Please try again.';
+            setResendMessage(errorMsg);
+            setTimeout(() => setResendMessage(''), 3000);
         }
     };
 
