@@ -29,8 +29,8 @@ const RoomSection = () => {
     try {
       const response = await boardService.joinBoardByCode(code);
 
-      if (response.ok) {
-        navigate(`/board/${response.data.joinCode}`);
+      if (response) {
+        navigate(`/board/${response.joinCode}`);
       } else {
         setError(response.data.error || 'Invalid room code');
       }
