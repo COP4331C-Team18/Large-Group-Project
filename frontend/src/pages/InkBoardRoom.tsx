@@ -195,6 +195,9 @@ export default function WhiteboardRoom() {
   // Active stroke being drawn right now
   const activeStroke = useRef<Stroke | null>(null);
 
+  // In-progress strokes from remote peers (keyed by stroke id)
+  const peerActiveStrokes = useRef<Map<string, Stroke>>(new Map());
+
   // Socket
   const socketRef = useRef<Socket | null>(null);
 
@@ -261,6 +264,11 @@ export default function WhiteboardRoom() {
     // Active (in-progress) stroke
     if (activeStroke.current) {
       renderStroke(ctx, activeStroke.current, vp);
+    }
+
+    // Peer in-progress strokes (ghost previews)
+    for (const s of peerActiveStrokes.current.values()) {
+      renderStroke(ctx, s, vp);
     }
   }, []);
 
@@ -456,21 +464,46 @@ export default function WhiteboardRoom() {
 
     // A peer drew something
     socket.on('draw_stroke', (stroke: Stroke) => {
+      peerActiveStrokes.current.delete(stroke.id);
       strokesRef.current.push(stroke);
       markDirty();
     });
 
-    // Partial pen update from peer (streaming)
-    socket.on('stroke_update', (data: { id: string; points: number[] }) => {
-      const s = strokesRef.current.find(x => x.id === data.id);
-      if (s) {
-        s.points = data.points;
-        markDirty();
+    // Partial update from peer: pen streaming or shape preview
+    socket.on('stroke_update', (data: {
+      id: string; tool?: string; color?: string; width?: number; opacity?: number;
+      points?: number[]; x0?: number; y0?: number; x1?: number; y1?: number;
+    }) => {
+      let ghost = peerActiveStrokes.current.get(data.id);
+      if (!ghost) {
+        // Bootstrap ghost stroke on first update
+        ghost = {
+          id: data.id,
+          tool: (data.tool ?? 'pen') as Exclude<Tool, 'pan'>,
+          color: data.color ?? '#111410',
+          width: data.width ?? 3,
+          opacity: data.opacity ?? 1,
+        };
+        peerActiveStrokes.current.set(data.id, ghost);
       }
+      // Keep metadata up to date
+      if (data.tool !== undefined) ghost.tool = data.tool as Exclude<Tool, 'pan'>;
+      if (data.color !== undefined) ghost.color = data.color;
+      if (data.width !== undefined) ghost.width = data.width;
+      if (data.opacity !== undefined) ghost.opacity = data.opacity;
+
+      if (data.points !== undefined) {
+        ghost.points = data.points;
+      } else if (data.x0 !== undefined) {
+        ghost.x0 = data.x0; ghost.y0 = data.y0;
+        ghost.x1 = data.x1; ghost.y1 = data.y1;
+      }
+      markDirty();
     });
 
     socket.on('clear_canvas', () => {
       strokesRef.current = [];
+      peerActiveStrokes.current.clear();
       undoStack.current = [];
       redoStack.current = [];
       syncUndoState();
@@ -618,15 +651,33 @@ export default function WhiteboardRoom() {
       s.points!.push(wx, wy);
 
       // Stream intermediate pen points to peers (throttled to every 8 points)
+      // Include full metadata on the first emit so peers can bootstrap the ghost
       if (boardId && s.points!.length % 8 === 0) {
-        socketRef.current?.emit('stroke_update', {
-          boardId,
-          id: s.id,
-          points: [...s.points!],
-        });
+        const payload: any = { boardId, id: s.id, points: [...s.points!] };
+        if (s.points!.length === 8) {
+          payload.tool = s.tool;
+          payload.color = s.color;
+          payload.width = s.width;
+          payload.opacity = s.opacity;
+        }
+        socketRef.current?.emit('stroke_update', payload);
       }
     } else {
       s.x1 = wx; s.y1 = wy;
+
+      // Stream shape preview to peers on every move
+      if (boardId) {
+        socketRef.current?.emit('stroke_update', {
+          boardId,
+          id: s.id,
+          tool: s.tool,
+          color: s.color,
+          width: s.width,
+          opacity: s.opacity,
+          x0: s.x0, y0: s.y0,
+          x1: s.x1, y1: s.y1,
+        });
+      }
     }
 
     markDirty();

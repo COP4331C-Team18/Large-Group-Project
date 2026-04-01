@@ -164,9 +164,20 @@ io.on('connection', (socket) => {
     Stroke.create(doc).catch((err: any) => console.error('Error saving stroke:', err));
   });
 
-  // Streaming partial pen update
-  socket.on('stroke_update', (data: { boardId: string; id: string; points: number[] }) => {
-    socket.to(data.boardId).emit('stroke_update', { id: data.id, points: data.points });
+  // Streaming partial pen update or shape preview
+  socket.on('stroke_update', (data: { boardId: string; id: string; tool?: string; color?: string; width?: number; opacity?: number; points?: number[]; x0?: number; y0?: number; x1?: number; y1?: number }) => {
+    socket.to(data.boardId).emit('stroke_update', {
+      id: data.id,
+      tool: data.tool,
+      color: data.color,
+      width: data.width,
+      opacity: data.opacity,
+      points: data.points,
+      x0: data.x0,
+      y0: data.y0,
+      x1: data.x1,
+      y1: data.y1,
+    });
   });
 
   // Clear canvas
