@@ -4,22 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import LoginHero from './LoginHero';
 import OAuth from '@/components/signup/OAuth';
 import { useAuth } from '@/contexts/AuthContext';
+import { authService } from '@/api/services/authService';
 
 // const app_name = 'inkboard.xyz';
-
-function buildPath(route:string) : string
-{
-  if (import.meta.env.MODE != 'development')
-  {
-    // Production: Point to the secure domain, NO port 5000!
-    return '/' + route; 
-  }
-  else
-  {
-    // Local Development remains unchanged
-    return 'http://localhost:5000/' + route;
-  }
-}
 
 export default function Login() {
   const [loginName, setLoginName] = useState('');
@@ -36,23 +23,13 @@ export default function Login() {
   const doLogin = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     try {
-      const response = await fetch(buildPath('api/auth/login'), {
-        method: 'POST',
-        body: JSON.stringify({ login: loginName, password: loginPassword }),
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include' 
-      });
-
-      const res = await response.json();
-
-      if (!response.ok || res.error) {
-        setMessage(res.error || 'Login failed');
-      } else {
-        // Update global context state so other components know we are logged in
-        login(res.user); 
-      }
+      const data = await authService.login({
+         login: loginName, 
+         password: loginPassword 
+        });
+      login(data.user); // update context with logged in user
     } catch (error: any) {
-      alert(error.toString());
+      setMessage(error.response?.data?.message || "Login failed. Please try again.");
     }
   };
 
@@ -60,9 +37,13 @@ export default function Login() {
     <section
       className="
         relative min-h-screen flex flex-col items-center justify-center
-        pt-28 pb-20 px-8 overflow-hidden bg-stem-bg
+        pt-28 pb-20 px-8 overflow-hidden bg-base-100
       "
     >
+            <div 
+        className="fixed inset-0 pointer-events-none z-0 bg-[radial-gradient(circle,grey,transparent_1px)] bg-[length:24px_24px]"
+      />
+
       <LoginHero />
  
       {/* Login card */}
@@ -70,13 +51,13 @@ export default function Login() {
         <div
           className="
             flex flex-col items-center gap-5
-            bg-white border border-[rgba(74,90,58,0.28)] border-t-[3px] border-t-cap
+            bg-base-200 border border-primary/20 border-t-[3px] border-t-primary
             rounded px-9 py-8
             shadow-[0_4px_20px_rgba(42,45,46,0.08)]
             w-full max-w-[420px]
           "
         >
-          <p className="font-sans text-[0.66rem] font-semibold tracking-[0.2em] uppercase text-soil-light">
+          <p className="font-sans text-[0.66rem] font-semibold tracking-[0.2em] uppercase text-primary">
             Sign in to your account
           </p>
  
@@ -89,11 +70,11 @@ export default function Login() {
               onKeyDown={(e) => e.key === 'Enter' && doLogin(e as any)}
               className="
                 w-full px-4 py-[0.7rem]
-                font-sans text-[0.93rem] text-ink
-                bg-stem-bg border border-[rgba(74,90,58,0.28)] rounded-[3px]
-                placeholder:text-soil-light
+                font-sans text-[0.93rem] text-base-content
+                bg-base-100 border border-primary/20 rounded-[3px]
+                placeholder:text-base-content/60
                 outline-none
-                focus:border-moss focus:ring-2 focus:ring-[rgba(74,90,58,0.15)]
+                focus:border-primary focus:ring-2 focus:ring-primary/30
                 transition-all duration-150
               "
             />
@@ -105,11 +86,11 @@ export default function Login() {
               onKeyDown={(e) => e.key === 'Enter' && doLogin(e as any)}
               className="
                 w-full px-4 py-[0.7rem]
-                font-sans text-[0.93rem] text-ink
-                bg-stem-bg border border-[rgba(74,90,58,0.28)] rounded-[3px]
-                placeholder:text-soil-light
+                font-sans text-[0.93rem] text-base-content
+                bg-base-100 border border-primary/20 rounded-[3px]
+                placeholder:text-base-content/60
                 outline-none
-                focus:border-moss focus:ring-2 focus:ring-[rgba(74,90,58,0.15)]
+                focus:border-primary focus:ring-2 focus:ring-primary/30
                 transition-all duration-150
               "
             />
@@ -121,9 +102,9 @@ export default function Login() {
             className="
               w-full flex items-center justify-center gap-2
               font-sans text-[0.76rem] font-semibold tracking-[0.1em] uppercase
-              bg-moss text-stem-light
+              bg-primary text-primary-content
               px-6 py-[0.82rem] rounded-[3px] border-none
-              transition-colors duration-200 hover:bg-forest
+              transition-colors duration-200 hover:bg-primary/90
               cursor-pointer
             "
           >
@@ -144,14 +125,14 @@ export default function Login() {
             </p>
           )}
  
-          <p className="font-sans text-[0.84rem] text-soil-light text-center">
+          <p className="font-sans text-[0.84rem] text-base-content/70 text-center">
             Don't have an account?{' '}
             <button
               onClick={() => navigate('/signup')}
               className="
-                text-moss font-semibold
+                text-primary font-semibold
                 border-b border-[rgba(74,90,58,0.3)] pb-px
-                hover:border-moss transition-colors duration-150
+                hover:border-primary transition-colors duration-150
                 bg-transparent border-x-0 border-t-0 cursor-pointer p-0
               "
             >

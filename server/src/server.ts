@@ -39,7 +39,7 @@ connectDB();
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/boards', boardRoutes); // Uncommented since Socket.io needs the boards
+app.use('/api/boards', boardRoutes);
 
 const server = http.createServer(app);
 

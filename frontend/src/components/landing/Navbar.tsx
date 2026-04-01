@@ -22,12 +22,12 @@ export default function Navbar() {
         fixed top-0 left-0 right-0 z-[200]
         flex items-center justify-between gap-8
         px-12 py-4
-        bg-[rgba(237,232,223,0.93)] backdrop-blur-md
-        border-b border-[rgba(74,90,58,0.28)]
+        bg-base-200 backdrop-blur-md
+        border-b border-primary/30
       "
     >
       {/* Logo */}
-      <a href="/" className="flex items-center gap-[0.65rem] font-serif text-[1.3rem] font-bold tracking-[-0.01em] text-ink no-underline">
+      <a href="/" className="flex items-center gap-[0.65rem] font-serif text-[1.3rem] font-bold tracking-[-0.01em] text-base-content no-underline">
         <InkcapLogo width={28} height={32} />
         InkBoard
       </a>
@@ -35,7 +35,7 @@ export default function Navbar() {
       {/* Nav links */}
       <div className="flex items-center gap-2">
         {/* GitHub */}
-        <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-[0.4rem] font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase text-soil px-[0.9rem] py-[0.45rem] rounded transition-colors duration-200 hover:text-ink hover:bg-[rgba(74,90,58,0.08)]">
+        <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-[0.4rem] font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase text-secondary px-[0.9rem] py-[0.45rem] rounded transition-colors duration-200 hover:text-ink hover:bg-[rgba(74,90,58,0.08)]">
           <GitHubIcon />
           GitHub
         </a>
@@ -44,7 +44,7 @@ export default function Navbar() {
           /* Show Dashboard button if logged in */
           <button
             onClick={() => navigate('/dashboard')}
-            className="flex items-center gap-[0.4rem] font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase bg-moss text-stem-light px-[0.9rem] py-[0.45rem] rounded border-none transition-colors duration-200 hover:bg-forest"
+            className="flex items-center gap-[0.4rem] font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase bg-primary text-primary-content px-[0.9rem] py-[0.45rem] rounded border-none transition-colors duration-200 hover:bg-primary/90"
           >
             View Dashboard
           </button>
@@ -53,13 +53,13 @@ export default function Navbar() {
           <>
             <button
               onClick={() => navigate('/login')}
-              className="flex items-center gap-[0.4rem] font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase text-cap px-[0.9rem] py-[0.45rem] rounded border border-[rgba(74,90,58,0.28)] transition-colors duration-200 hover:text-ink hover:bg-[rgba(74,90,58,0.08)]"
+              className="flex items-center gap-[0.4rem] font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase text-primary-content px-[0.9rem] py-[0.45rem] bg-secondary rounded border border-primary/80 transition-colors duration-200 hover:text-primary-content hover:bg-primary/80"
             >
               Log in
             </button>
             <button
               onClick={() => navigate('/signup')}
-              className="flex items-center gap-[0.4rem] font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase bg-moss text-stem-light px-[0.9rem] py-[0.45rem] rounded border-none transition-colors duration-200 hover:bg-forest"
+              className="flex items-center gap-[0.4rem] font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase bg-primary text-primary-content px-[0.9rem] py-[0.45rem] rounded border-none transition-colors duration-200 hover:bg-primary/90"
             >
               Create account
             </button>
