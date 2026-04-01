@@ -5,7 +5,7 @@ import { io, Socket } from 'socket.io-client';
 const SOCKET_URL =
   import.meta.env.MODE !== 'development'
     ? 'https://inkboard.xyz'
-    : 'http://localhost:5001';
+    : 'http://localhost:5000';
 
 export function useSocket(boardId: string | undefined) {
   const socketRef = useRef<Socket | null>(null);

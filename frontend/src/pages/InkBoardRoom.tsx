@@ -54,12 +54,12 @@ interface Viewport {
 const SOCKET_URL =
   import.meta.env.MODE !== 'development'
     ? 'https://inkboard.xyz'
-    : 'http://localhost:5001';
+    : 'http://localhost:5000';
 
 function buildPath(route: string): string {
   return import.meta.env.MODE !== 'development'
     ? `https://inkboard.xyz/${route}`
-    : `http://localhost:5001/${route}`;
+    : `http://localhost:5000/${route}`;
 }
 
 const PALETTE = [
