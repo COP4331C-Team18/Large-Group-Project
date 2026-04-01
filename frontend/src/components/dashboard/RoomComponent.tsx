@@ -1,29 +1,45 @@
+// src/components/dashboard/RoomComponent.tsx
 import { Plus, ArrowRight } from 'lucide-react';
 import { useState, useRef } from 'react';
 import BoardModal from './BoardModal';
+import { useNavigate } from 'react-router-dom';
+import { boardService } from '@/api/services/boardService';
 
 const RoomSection = () => {
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const [creating, setCreating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const maxLength = 6;
+  const navigate = useNavigate();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.toUpperCase();
-    
-    const regex = /^[A-Z0-9]*$/;
-
-    if (!regex.test(val)) {
-      return;
-    }
-
+    if (!/^[A-Z0-9]*$/.test(val)) return;
     if (val.length <= maxLength) {
       setCode(val);
+      setError('');
+    }
+  };
+
+  // ── Join an existing board by code ────────────────────────────────────────
+  const handleJoinRoom = async () => {
+    if (code.length !== maxLength) return;
+    setError('');
+    try {
+      const response = await boardService.joinBoardByCode(code);
+
+      if (response.ok) {
+        navigate(`/board/${response.data.joinCode}`);
+      } else {
+        setError(response.data.error || 'Invalid room code');
+      }
+    } catch {
+      setError('Network error. Is the server running?');
     }
   };
 
   return (
-    
-    <>
       <div className="flex items-stretch w-full gap-3 flex-shrink-0">
       
       {/* 2. Left Box */}
@@ -61,6 +77,7 @@ const RoomSection = () => {
         <span className="text-primary-content text-[14px] font-bold tracking-[0.3em] font-serif uppercase mb-6">
           Have Code? Join Now!
         </span>
+        <div className="flex flex-col flex-1 justify-center gap-4 pl-4 pr-4">
 
         <div className="flex flex-col gap-4 flex-1 items-center justify-center w-full">
             {/* Square Inputs Container */}
@@ -87,7 +104,7 @@ const RoomSection = () => {
             </div>
 
             <div className="flex flex-col items-center w-full gap-2">
-              <button disabled={code.length < maxLength} className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-base-100 text-base-content font-bold uppercase tracking-widest text-xs transition-all hover:ring-1 hover:ring-secondary disabled:opacity-30 disabled:grayscale">
+              <button disabled={code.length < maxLength} onClick={handleJoinRoom} className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-base-100 text-base-content font-bold uppercase tracking-widest text-xs transition-all hover:ring-1 hover:ring-secondary disabled:opacity-30 disabled:grayscale">
                   Join the Room with Host's Code
                   <ArrowRight size={18} />
                 </button>
@@ -99,7 +116,7 @@ const RoomSection = () => {
       </div>
     </div>
     <BoardModal />
-    </>
+    </div>
   );
 };
 
