@@ -1,5 +1,5 @@
 import DashboardNavBar from '@/components/dashboard/DashboardNavbar';
-import Sidebar from '@/components/dashboard/Sidebar';
+// import Sidebar from '@/components/dashboard/Sidebar';
 import DashboardMain from '@/components/dashboard/DashboardMain';
 
 export default function Dashboard() {

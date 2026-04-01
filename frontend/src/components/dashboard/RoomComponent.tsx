@@ -8,7 +8,6 @@ import { boardService } from '@/api/services/boardService';
 const RoomSection = () => {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
-  const [creating, setCreating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const maxLength = 6;
   const navigate = useNavigate();
@@ -20,6 +19,7 @@ const RoomSection = () => {
       setCode(val);
       setError('');
     }
+    error && setError('');
   };
 
   // ── Join an existing board by code ────────────────────────────────────────
