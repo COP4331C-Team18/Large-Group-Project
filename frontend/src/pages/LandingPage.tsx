@@ -9,26 +9,35 @@ import Footer from '@/components/landing/Footer';
 export default function LandingPage() {
   return (
     <>
-      {/* Dot-grid texture */}
-      <div 
-        className="fixed inset-0 pointer-events-none z-0 bg-[radial-gradient(circle,grey,transparent_1px)] bg-[length:24px_24px]"
+      {/* Fixed dot-grid texture overlay */}
+      <div
+        id="dot-grid"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundImage:
+            'radial-gradient(circle, rgba(74,90,58,0.055) 1px, transparent 1px)',
+          backgroundSize: '24px 24px',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
       />
 
       <Navbar />
       <HeroSection />
 
       {/* Hero → Features: dark cap drips down into light */}
-      <DripDivider/>
+      <DripDivider dripColor="#2a2d2e" bgColor="#ede8df" />
 
       <FeaturesSection />
 
       {/* Features → How it works: drips transition into dark cap section */}
-      <DripDivider flip={true} />
+      <DripDivider dripColor="#2a2d2e" bgColor="#ede8df" />
 
       <HowItWorksSection />
 
       {/* How it works → CTA: inverted drips bring us back to light */}
-      <DripDivider/>
+      <DripDivider dripColor="#ede8df" bgColor="#2a2d2e" flip />
 
       <CtaSection />
       <Footer />

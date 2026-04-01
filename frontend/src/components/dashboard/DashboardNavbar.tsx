@@ -8,17 +8,17 @@ export default function DashboardNavBar() {
  
   return (
     <nav
-      className="navbar px-5 rounded-3xl bg-base-200 border border-neutral shadow-md"
+      className="navbar px-5 rounded-3xl background-base-dashboard bg-primary-content border-dashboard-accent border-2 shadow-md"
     >
       {/* LEFT: Logo / Home Link */}
       <div className="flex-1">
         <Link
           to="/"
-          className="btn btn-ghost px-2 hover:bg-base-300 flex items-center gap-2"
+          className="btn btn-ghost px-2 hover:bg-transparent flex items-center gap-2"
         >
           <InkcapLogo />
           <span
-            className="text-xl normal-case tracking-tight text-base-content font-serif"
+            className="text-xl normal-case tracking-tight text-[#2D3A27] font-serif"
           >
             Ink DashBoard
           </span>
@@ -29,18 +29,20 @@ export default function DashboardNavBar() {
       <div className="flex-none flex items-center gap-0.5">
         <Link
           to="/settings"
-          className="btn btn-square btn-ghost text-base-content/70 hover:bg-secondary/20"
+          className="btn btn-square btn-ghost"
           aria-label="App Preferences"
           title="App Preferences"
+          style={{ color: '#4a5a3a' }}
         >
           <Settings className="h-5 w-5" />
         </Link>
 
         <Link
           to="/profile"
-          className="btn btn-square btn-ghost text-base-content/70 hover:bg-secondary/20"
+          className="btn btn-square btn-ghost"
           aria-label="Profile Settings"
           title="Profile Settings"
+          style={{ color: '#243d2e' }}
         >
           <UserCircle className="h-5 w-5" />
         </Link>
@@ -51,9 +53,10 @@ export default function DashboardNavBar() {
         {/* (The Logout Button) */}
         <button
           onClick={logout} // <-- Add the onClick handler here
-          className="btn btn-square btn-ghost hover:bg-secondary/20 text-red-500/90"
+          className="btn btn-square btn-ghost hover:bg-[#A67C5222]" 
           aria-label="Logout"
           title="Logout"
+          style={{ color: 'red' }}
         >
           <LogOut className="h-5 w-5" />
         </button>

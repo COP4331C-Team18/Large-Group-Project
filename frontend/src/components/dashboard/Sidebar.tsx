@@ -7,10 +7,10 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = () => {
   return (
     <aside className="
-    h-full
+    w-48 h-full
     flex flex-col items-center justify-between
-    py-6 rounded-3xl
-    bg-base-200 border border-neutral shadow-xl">
+    py-6 rounded-3xl border-2
+    bg-base-dashboard border-dashboard-accent shadow-xl">
       <TemplatesCarousel />
     </aside>
   );
