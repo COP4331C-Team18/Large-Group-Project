@@ -1,18 +1,22 @@
 import React from "react";
+import { motion } from "framer-motion";
 
 export interface InkBoardCardProps {
+  id?: number | string;
   title: string;
   editedAt: string;
   onClick?: () => void;
 }
 
 const InkBoardCard: React.FC<InkBoardCardProps> = ({
+  id,
   title,
   editedAt,
   onClick,
 }) => {
   return (
-    <div
+    <motion.div
+      layoutId={id ? String(id) : undefined}
       onClick={onClick}
       className="group relative cursor-pointer rounded-[14px] aspect-video
         border border-base-300 bg-base-100 p-5
@@ -44,12 +48,12 @@ const InkBoardCard: React.FC<InkBoardCardProps> = ({
       <p
         className="
           font-['Crimson_Pro',Georgia,serif] text-[0.78rem] text-base-content/35
-          italic text-black
+          italic
         "
       >
         {editedAt}
       </p>
-    </div>
+    </motion.div>
   );
 };
 

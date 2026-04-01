@@ -11,7 +11,7 @@ export default function Dashboard() {
       
       <div className="flex-1 flex flex-row gap-3 overflow-hidden">
       <div className="flex flex-row items-stretch gap-3 w-full h-full">
-    <Sidebar />
+    {/*<Sidebar />*/}
     <DashboardMain />
   </div>
       </div>
