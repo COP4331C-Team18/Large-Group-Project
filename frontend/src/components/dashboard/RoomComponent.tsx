@@ -1,23 +1,69 @@
+// src/components/dashboard/RoomComponent.tsx
 import { Plus, ArrowRight } from 'lucide-react';
 import { useState, useRef } from 'react';
 import BoardModal from './BoardModal';
 
 const RoomSection = () => {
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const [creating, setCreating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const maxLength = 6;
+  const navigate = useNavigate();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.toUpperCase();
-    
-    const regex = /^[A-Z0-9]*$/;
-
-    if (!regex.test(val)) {
-      return;
-    }
-
+    if (!/^[A-Z0-9]*$/.test(val)) return;
     if (val.length <= maxLength) {
       setCode(val);
+      setError('');
+    }
+  };
+
+  // ── Create a new board ────────────────────────────────────────────────────
+  const handleCreateBoard = async () => {
+    setCreating(true);
+    setError('');
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(buildPath('api/boards'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ title: 'My New Whiteboard' }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        navigate(`/board/${data.joinCode}`);
+      } else {
+        setError(data.error || 'Failed to create board');
+      }
+    } catch {
+      setError('Network error. Is the server running?');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // ── Join an existing board by code ────────────────────────────────────────
+  const handleJoinRoom = async () => {
+    if (code.length !== maxLength) return;
+    setError('');
+    try {
+      const response = await fetch(buildPath(`api/boards/join/${code}`));
+      const data = await response.json();
+
+      if (response.ok) {
+        navigate(`/board/${data.joinCode}`);
+      } else {
+        setError(data.error || 'Invalid room code');
+      }
+    } catch {
+      setError('Network error. Is the server running?');
     }
   };
 
@@ -61,6 +107,7 @@ const RoomSection = () => {
         <span className="text-primary-content text-[14px] font-bold tracking-[0.3em] font-serif uppercase mb-6">
           Have Code? Join Now!
         </span>
+        <div className="flex flex-col flex-1 justify-center gap-4 pl-4 pr-4">
 
         <div className="flex flex-col gap-4 flex-1 items-center justify-center w-full">
             {/* Square Inputs Container */}
