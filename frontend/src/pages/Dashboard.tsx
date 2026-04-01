@@ -2,7 +2,7 @@ import DashboardNavBar from '@/components/dashboard/DashboardNavbar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import DashboardMain from '@/components/dashboard/DashboardMain';
 
-export function Dashboard() {
+export default function Dashboard() {
 
   return (
     <div className="h-screen w-full p-3 flex flex-col bg-[#ede8df] gap-3 overflow-hidden">

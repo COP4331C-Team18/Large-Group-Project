@@ -1,4 +1,6 @@
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+
 
 function GitHubIcon() {
   return (
@@ -10,10 +12,9 @@ function GitHubIcon() {
 
 export default function CtaSection() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAuthenticated = !!user; 
   
-  // Check if the user is currently logged in
-  const isAuthenticated = !!localStorage.getItem('token');
-
   return (
     <section className="relative py-36 px-8 text-center max-w-[680px] mx-auto">
       {/* ... keeping the background glow, eyebrow, headline, and subtext exactly the same ... */}

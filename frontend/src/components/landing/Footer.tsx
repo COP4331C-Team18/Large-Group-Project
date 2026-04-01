@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import InkcapLogo from '@/components/common/InkcapLogo';
+import { useAuth } from '@/contexts/AuthContext';
 
 function GitHubIcon() {
   return (
@@ -11,9 +12,8 @@ function GitHubIcon() {
 
 export default function Footer() {
   const navigate = useNavigate();
-  
-  // Check if the user is currently logged in
-  const isAuthenticated = !!localStorage.getItem('token');
+  const { user } = useAuth();
+  const isAuthenticated = !!user;
 
   return (
     <footer className="border-t border-[rgba(74,90,58,0.28)] px-12 py-8 flex items-center justify-between flex-wrap gap-4" style={{ background: '#e4ddd0' }}>
