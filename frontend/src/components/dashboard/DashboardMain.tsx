@@ -3,8 +3,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import InkBoardCard from "./BoardCard";
 import RoomSection from "./RoomComponent";
 import { boardService } from "@/api/services/boardService";
+import { useNavigate } from "react-router-dom";
 
 const DashboardMain = () => {
+  const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [boards, setBoards] = useState<any[]>([]);
   const [isEditing, setIsEditing] = useState(false);
@@ -32,6 +34,12 @@ const DashboardMain = () => {
         description: selectedBoard.description,
       });
       setIsEditing(true);
+    }
+  };
+
+  const handleOpenBoard = () => {
+    if (selectedBoard) {
+      navigate(`/board/${selectedBoard.id || selectedBoard._id}`);
     }
   };
 
@@ -77,6 +85,7 @@ const DashboardMain = () => {
                             id={board.id || board._id}
                             title={board.title || board.name}
                             editedAt={board.editedAt || board.updatedAt || new Date().toLocaleDateString()}
+                            snapshot={board.snapshot}
                             onClick={() => {
                               setSelectedId(String(board.id || board._id));
                               setIsEditing(false);
@@ -171,7 +180,7 @@ const DashboardMain = () => {
                         >
                           Edit
                         </button>
-                        <button className="btn btn-primary">
+                        <button className="btn btn-primary" onClick={handleOpenBoard}>
                           Open Board
                         </button>
                       </>
