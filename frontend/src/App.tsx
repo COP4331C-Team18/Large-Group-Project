@@ -1,17 +1,19 @@
+import LandingPage from '@/pages/LandingPage';
+import Dashboard from '@/pages/Dashboard';
 import { Routes, Route } from 'react-router-dom';
-import {Suspense, lazy} from 'react';
+import LoginPage from '@/pages/LoginPage';
+import SignupPage from '@/pages/SignUpPage';
 import PrivateRoutes from '@/config/privateRoutes';
 import WhiteboardRoom from '@/pages/InkBoardRoom';
 
 export default function App() {
   return (
     <div className="Router">
-      <Suspense fallback={<Loading />}>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/signup" element={<SignupPage />} />
-          <Route path="/login" element={<LoginPage />} />
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/login" element={<LoginPage />} />
 
         {/* PUBLIC Collaborative Room Route */}
         {/* This allows guests to join via a link or 6-digit code without logging in */}

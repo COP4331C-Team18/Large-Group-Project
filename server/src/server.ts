@@ -1,25 +1,49 @@
 // server.ts
 import 'dotenv/config';
+
 import express from 'express';
 import cors from 'cors';
 import http from 'http';
+import cookieParser from 'cookie-parser';
 import { Server } from 'socket.io';
-import connectDB from './config/db';
-import authRoutes from './api/authRoutes';
-import boardRoutes from './api/boardRoutes';
-import Stroke from './models/Stroke';
-import Board from './models/Board';
+
+import rateLimiter from './middleware/rateLimiter.js';
+import connectDB from './config/db.js';
+
+// Routes
+import authRoutes from './routers/authRoutes.js';
+import userRoutes from './routers/userRoutes.js';
+import boardRoutes from './routers/boardRoutes.js';
+
+// Models
+import Stroke from './models/Stroke.js';
+import Board from './models/Board.js';
 
 const app = express();
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+
+const corsOptions = {
+    origin: 'http://localhost:5173', // Removed trailing slash to match file (1)
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+// ── Express Middleware ────────────────────────────────────────────────────────
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '10mb' })); // Kept 10mb limit for large canvas snapshots
+app.use(cookieParser());
+app.use(rateLimiter);
+
 connectDB();
 
+// ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
-app.use('/api/boards', boardRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/boards', boardRoutes); // Uncommented since Socket.io needs the boards
 
 const server = http.createServer(app);
 
+// ── Socket.IO Setup ───────────────────────────────────────────────────────────
 const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
 });
@@ -42,20 +66,13 @@ function getRoomCount(boardId: string): number {
 
 const socketToBoard = new Map<string, string>();
 
-// ── New stroke shape ──────────────────────────────────────────────────────────
-// Strokes are now stored as a single JSONB document per stroke (not segments).
-// The Stroke model's `points` field holds the serialised path.
-// Shape strokes still use x0/y0/x1/y1 for simplicity.
-
 interface IncomingStroke {
   id?: string;
   tool: string;
   color: string;
   width: number;
   opacity?: number;
-  // Pen/eraser path
   points?: number[];
-  // Shape start/end
   x0?: number; y0?: number;
   x1?: number; y1?: number;
 }
@@ -64,7 +81,7 @@ interface IncomingStroke {
 io.on('connection', (socket) => {
   console.log(`🟢 Connected: ${socket.id}`);
 
-  // ── Join board ──────────────────────────────────────────────────────────────
+  // Join board
   socket.on('join_board', async (boardId: string) => {
     socket.join(boardId);
     addToRoom(boardId, socket.id);
@@ -77,7 +94,6 @@ io.on('connection', (socket) => {
     // Replay all saved strokes to the joining socket only
     try {
       const strokes = await Stroke.find({ boardId }).sort({ createdAt: 1 }).lean();
-      // Parse stored points back to arrays if needed
       const hydrated = strokes.map((s: any) => {
         const out: any = {
           id: s._id.toString(),
@@ -102,7 +118,7 @@ io.on('connection', (socket) => {
     socket.emit('user_count', getRoomCount(boardId));
   });
 
-  // ── Full stroke committed ───────────────────────────────────────────────────
+  // Full stroke committed
   socket.on('draw_stroke', async (data: { boardId: string; stroke: IncomingStroke }) => {
     const { boardId, stroke } = data;
 
@@ -119,9 +135,7 @@ io.on('connection', (socket) => {
     };
 
     if (stroke.points && stroke.points.length > 0) {
-      // Store path as JSON string to avoid schema limitations
       doc.pointsData = JSON.stringify(stroke.points);
-      // Store bounding box for potential spatial queries later
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       for (let i = 0; i < stroke.points.length; i += 2) {
         minX = Math.min(minX, stroke.points[i]);
@@ -140,13 +154,12 @@ io.on('connection', (socket) => {
     Stroke.create(doc).catch((err: any) => console.error('Error saving stroke:', err));
   });
 
-  // ── Streaming partial pen update (for smooth peer rendering while drawing) ──
+  // Streaming partial pen update
   socket.on('stroke_update', (data: { boardId: string; id: string; points: number[] }) => {
-    // Just rebroadcast — no persistence needed (final stroke persists on pointerup)
     socket.to(data.boardId).emit('stroke_update', { id: data.id, points: data.points });
   });
 
-  // ── Clear canvas ────────────────────────────────────────────────────────────
+  // Clear canvas
   socket.on('clear_canvas', async (boardId: string) => {
     socket.to(boardId).emit('clear_canvas');
     try {
@@ -157,7 +170,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ── Snapshot ─────────────────────────────────────────────────────────────────
+  // Snapshot
   socket.on('save_snapshot', async (data: { boardId: string; snapshot: string }) => {
     try {
       await Board.findByIdAndUpdate(data.boardId, {
@@ -169,7 +182,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ── Disconnect ───────────────────────────────────────────────────────────────
+  // Disconnect
   socket.on('disconnect', () => {
     console.log(`🔴 Disconnected: ${socket.id}`);
     const boardId = socketToBoard.get(socket.id);
@@ -185,5 +198,8 @@ io.on('connection', (socket) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT;
-if (!PORT) throw new Error('PORT is not defined in .env');
+if (!PORT) {
+    throw new Error('PORT is not defined in .env');
+}
+
 server.listen(PORT, () => console.log(`🚀 Backend running on port ${PORT}`));
