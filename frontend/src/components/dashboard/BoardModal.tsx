@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import api from '../../api/axios';
+import { boardService } from '@/api/services/boardService';
 
 const BoardModal = () => {
   const [formData, setFormData] = useState({
@@ -21,7 +21,7 @@ const BoardModal = () => {
     console.log("Saving Board...", formData);
 
     try {
-      await api.post('/boards', formData);
+      await boardService.createBoard(formData);
       
       // Clear form
       setFormData({ name: '', description: '' });
