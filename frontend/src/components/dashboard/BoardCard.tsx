@@ -5,6 +5,7 @@ export interface InkBoardCardProps {
   id?: number | string;
   title: string;
   editedAt: string;
+  snapshot?: string;
   onClick?: () => void;
 }
 
@@ -12,6 +13,7 @@ const InkBoardCard: React.FC<InkBoardCardProps> = ({
   id,
   title,
   editedAt,
+  snapshot,
   onClick,
 }) => {
   return (
@@ -36,7 +38,11 @@ const InkBoardCard: React.FC<InkBoardCardProps> = ({
           relative mb-[0.85rem] overflow-hidden  aspect-video
           rounded-lg bg-base-300
           px-3 py-3">
-        PREVIEW HERE
+        {snapshot ? (
+          <img src={snapshot} alt={`Snapshot of ${title} (ID: ${id})`} className="w-full h-full object-cover rounded-lg" />
+        ) : (
+          "PREVIEW HERE"
+        )}
       </div>
 
       <p
