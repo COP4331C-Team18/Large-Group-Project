@@ -6,18 +6,18 @@ export const boardService = {
     return response.data;
   },
 
-  createBoard: async (boardData: { name: string; description: string }) => {
+  createBoard: async (boardData: { title: string; category?: string; description?: string }) => {
     const response = await api.post('/boards', boardData);
     return response.data;
   },
 
-  getBoardById: async (id: string) => {
-    const response = await api.get(`/boards/${id}`);
+  joinBoardByCode: async (code: string) => {
+    const response = await api.get(`/boards/join/${code}`);
     return response.data;
   },
 
   updateBoard: async (id: string, boardData: any) => {
-    const response = await api.patch(`/boards/${id}`, boardData);
+    const response = await api.put(`/boards/${id}`, boardData);
     return response.data;
   },
 

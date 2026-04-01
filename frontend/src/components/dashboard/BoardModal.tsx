@@ -3,7 +3,7 @@ import { boardService } from '@/api/services/boardService';
 
 const BoardModal = () => {
   const [formData, setFormData] = useState({
-    name: '',
+    title: '',
     description: '',
   });
 
@@ -24,7 +24,7 @@ const BoardModal = () => {
       await boardService.createBoard(formData);
       
       // Clear form
-      setFormData({ name: '', description: '' });
+      setFormData({ title: '', description: '' });
       
       // Close modal
       const modal = document.getElementById('board_modal') as HTMLDialogElement | null;
@@ -57,8 +57,8 @@ const BoardModal = () => {
             <div className="form-control">
               <input 
                 type="text" 
-                name="name"
-                value={formData.name}
+                name="title"
+                value={formData.title}
                 onChange={handleChange}
                 placeholder="Board Name" 
                 className="input input-bordered w-full" 

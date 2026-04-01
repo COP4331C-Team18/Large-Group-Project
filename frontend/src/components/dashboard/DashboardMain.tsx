@@ -8,7 +8,7 @@ const DashboardMain = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [boards, setBoards] = useState<any[]>([]);
   const [isEditing, setIsEditing] = useState(false);
-  const [editData, setEditData] = useState({ name: "", description: "" });
+  const [editData, setEditData] = useState({ title: "", description: "" });
 
   const fetchBoards = async () => {
     try {
@@ -28,8 +28,8 @@ const DashboardMain = () => {
   const handleEditToggle = () => {
     if (selectedBoard) {
       setEditData({
-        name: selectedBoard.title || selectedBoard.name || "",
-        description: selectedBoard.description || "",
+        title: selectedBoard.title,
+        description: selectedBoard.description,
       });
       setIsEditing(true);
     }
@@ -112,8 +112,8 @@ const DashboardMain = () => {
                   <div className="flex flex-col gap-4">
                     <input
                       type="text"
-                      value={editData.name}
-                      onChange={(e) => setEditData({ ...editData, name: e.target.value })}
+                      value={editData.title}
+                      onChange={(e) => setEditData({ ...editData, title: e.target.value })}
                       className="input input-bordered w-full font-serif text-2xl"
                     />
                     <textarea
