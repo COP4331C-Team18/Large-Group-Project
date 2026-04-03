@@ -683,6 +683,18 @@ export default function Whiteboard() {
     return () => { ydocRef.current.off('update', onUpdate); };
   }, []);
 
+  // Close WebSocket immediately when browser back/forward button is pressed
+  useEffect(() => {
+    const handlePopState = () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   // Cleanup WebSocket and reconnect timer on unmount
   useEffect(() => {
     return () => {
@@ -751,7 +763,7 @@ export default function Whiteboard() {
       className="flex h-screen overflow-hidden select-none"
       style={{ background: '#EDEAE2', fontFamily: "'Raleway', sans-serif" }}
     >
-      <WhiteboardToolbar 
+      <WhiteboardToolbar
         tool={tool}
         setTool={setTool}
         undo={undo}
@@ -760,7 +772,13 @@ export default function Whiteboard() {
         canRedoState={canRedoState}
         handleClear={handleClear}
         handleDownload={handleDownload}
-        navigate={navigate}
+        onBack={() => {
+          if (wsRef.current) {
+            wsRef.current.close();
+            wsRef.current = null;
+          }
+          navigate('/dashboard');
+        }}
       />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">

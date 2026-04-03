@@ -51,7 +51,7 @@ interface WhiteboardToolbarProps {
   canRedoState: boolean;
   handleClear: () => void;
   handleDownload: () => void;
-  navigate: (path: string) => void;
+  onBack: () => void;
 }
 
 const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
@@ -63,7 +63,7 @@ const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
   canRedoState,
   handleClear,
   handleDownload,
-  navigate,
+  onBack,
 }) => {
   return (
     <aside
@@ -72,7 +72,7 @@ const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
     >
       {/* Back */}
       <button
-        onClick={() => navigate('/dashboard')}
+        onClick={onBack}
         title="Back to Dashboard"
         className="flex items-center justify-center w-10 h-10 rounded-xl text-secondary hover:bg-secondary/10 transition mb-1"
       >

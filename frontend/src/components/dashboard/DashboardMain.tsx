@@ -60,8 +60,10 @@ const DashboardMain = () => {
     if (!window.confirm("Are you sure you want to delete this board?")) return;
     try {
       await boardService.deleteBoard(selectedId);
+      // Remove the card and close the modal in the same render so Framer Motion's
+      // shared layoutId has no card to animate back to during the exit animation.
+      setBoards(prev => prev.filter(b => String(b.id || b._id) !== selectedId));
       setSelectedId(null);
-      fetchBoards();
     } catch (error) {
       console.error("Error deleting board:", error);
     }
