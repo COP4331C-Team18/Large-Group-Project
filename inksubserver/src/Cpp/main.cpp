@@ -3,7 +3,6 @@
 #include <iostream>
 #include <string>
 #include <nlohmann/json.hpp>
-#include <sys/resource.h> 
 #include "Link.h"
 
 using json = nlohmann::json;
@@ -24,18 +23,6 @@ json loadConfig(const std::string& path) {
 }
 
 int main() {
-    // ── STEP 1: KERNEL UNLOCK ────────────────────────────────────────────────
-    struct rlimit rl;
-    if (getrlimit(RLIMIT_NOFILE, &rl) == 0) {
-        rl.rlim_cur = 20000; 
-        rl.rlim_max = 20000;
-        if (setrlimit(RLIMIT_NOFILE, &rl) != 0) {
-            std::cerr << "[!] System limit override failed. Run with 'sudo'!\n";
-        } else {
-            std::cout << "[inksubserver] Kernel unlock successful: 20,000 allowed.\n";
-        }
-    }
-
     json config = loadConfig("config/config.json");
     int port = config["server"]["port"];
     unsigned short idleTimeout = static_cast<unsigned short>((int)config["server"]["idle_timeout"]);
@@ -44,8 +31,6 @@ int main() {
     apiConfig.url = config["node_api"].value("url", "http://localhost:5001/api");
     apiConfig.internalSecret = config["node_api"].value("internal_secret", "");
 
-    // ── STEP 2: ENGINE LAUNCH ────────────────────────────────────────────────
-    
     if (config["ssl"]["enabled"]) {
         LinkManager<true> links(apiConfig);
         uWS::SSLApp({

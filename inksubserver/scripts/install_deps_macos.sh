@@ -22,11 +22,11 @@ if [ ! -f "$HOMEBREW_PREFIX/lib/libuSockets.a" ]; then
     rm -rf /tmp/uSockets
     git clone https://github.com/uNetworking/uSockets.git /tmp/uSockets
     cd /tmp/uSockets
-    make WITH_SSL=1 \
+    make WITH_OPENSSL=1 \
         CFLAGS="-I$HOMEBREW_PREFIX/include -I$OPENSSL_PREFIX/include" \
         LDFLAGS="-L$HOMEBREW_PREFIX/lib -L$OPENSSL_PREFIX/lib"
-    cp libuSockets.a "$HOMEBREW_PREFIX/lib/"
-    cp src/*.h "$HOMEBREW_PREFIX/include/"
+    sudo cp uSockets.a "$HOMEBREW_PREFIX/lib/libuSockets.a"
+    sudo cp src/*.h "$HOMEBREW_PREFIX/include/"
     cd -
     echo "==> uSockets installed"
 else
@@ -38,8 +38,8 @@ if [ ! -d "$HOMEBREW_PREFIX/include/uWebSockets" ]; then
     echo "==> Installing uWebSockets headers..."
     rm -rf /tmp/uWebSockets
     git clone https://github.com/uNetworking/uWebSockets.git /tmp/uWebSockets
-    mkdir -p "$HOMEBREW_PREFIX/include/uWebSockets"
-    cp -r /tmp/uWebSockets/src/* "$HOMEBREW_PREFIX/include/uWebSockets/"
+    sudo mkdir -p "$HOMEBREW_PREFIX/include/uWebSockets"
+    sudo cp -r /tmp/uWebSockets/src/* "$HOMEBREW_PREFIX/include/uWebSockets/"
     echo "==> uWebSockets installed"
 else
     echo "==> uWebSockets already installed, skipping"

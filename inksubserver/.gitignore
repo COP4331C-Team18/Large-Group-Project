@@ -32,4 +32,4 @@ Makefile
 # Compiled object files
 *.o
 *.a
-*.out.vscode/
+*.out
