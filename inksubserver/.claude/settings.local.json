@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x /Users/akin/inksubserver/scripts/install_deps_macos.sh /Users/akin/inksubserver/scripts/install_deps.sh /Users/akin/inksubserver/scripts/run_local.sh /Users/akin/inksubserver/deploy.sh)"
+    ]
+  }
+}

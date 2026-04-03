@@ -1,5 +1,5 @@
 import express from 'express';
-import { getMyBoards, joinBoardByCode, createBoard, updateBoard, deleteBoard } from '../controllers/boardController.js';
+import { getMyBoards, joinBoardByCode, createBoard, updateBoard, deleteBoard, getBoardById } from '../controllers/boardController.js';
 import { protect } from '../middleware/jwtProtect.js';
 
 const router = express.Router();
@@ -9,6 +9,8 @@ router.get('/', protect, getMyBoards);
 
 // Protected route to CREATE a new board
 router.post('/', protect, createBoard);
+
+router.get('/:id', protect, getBoardById);
 
 // Protected route to UPDATE a board
 router.put('/:id', protect, updateBoard);

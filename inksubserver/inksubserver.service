@@ -1,0 +1,37 @@
+[Unit]
+Description=inksubserver WebSocket Server
+Documentation=https://github.com/uNetworking/uWebSockets
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/inksubserver
+ExecStart=/opt/inksubserver/build/inksubserver
+ExecReload=/bin/kill -HUP $MAINPID
+
+# --- Restart Policy ---
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+# --- Logging ---
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=inksubserver
+
+# --- Security Hardening ---
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/inksubserver/logs
+PrivateTmp=true
+
+# --- Environment ---
+Environment=HOME=/opt/inksubserver
+
+[Install]
+WantedBy=multi-user.target

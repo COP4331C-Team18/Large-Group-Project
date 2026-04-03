@@ -46,6 +46,29 @@ export const joinBoardByCode = async (req: Request, res: Response) => {
   }
 };
 
+export const getBoardById = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+
+    // Find the board and make sure the current user is the owner
+    const board = await Board.findOne({ _id: id, owner: userId });
+
+    if (!board) {
+      return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: 'Board not found or unauthorized' });
+    }
+
+    return res.status(HTTPStatusCodes.OK).json(board);
+  } catch (err) {
+    console.error("Error fetching board by ID:", err);
+    return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Server error fetching board' });
+  }
+};
+
 // Helper function to generate a 6-digit string
 const generateJoinCode = () => Math.floor(100000 + Math.random() * 900000).toString();
 
