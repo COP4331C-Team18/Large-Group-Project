@@ -5,6 +5,7 @@ import LoginPage from '@/pages/LoginPage';
 import SignupPage from '@/pages/SignUpPage';
 import PrivateRoutes from '@/config/privateRoutes';
 import WhiteboardRoom from '@/pages/InkBoardRoom';
+import SettingsPage from '@/pages/SettingsPage';
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
 
         {/* PUBLIC Collaborative Room Route */}
         {/* This allows guests to join via a link or 6-digit code without logging in */}
@@ -22,6 +24,7 @@ export default function App() {
         {/* Private Routes needs authentication */}
         <Route element={<PrivateRoutes />} >
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>
     </div>
