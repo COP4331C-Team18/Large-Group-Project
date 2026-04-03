@@ -10,7 +10,8 @@ export interface AuthRequest extends Request {
 export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
   // 1. Get the token from the "Authorization: Bearer <token>" header
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const headerToken = authHeader && authHeader.split(' ')[1];
+  const token = headerToken || req.cookies?.accessToken;
 
   // 2. If there is no token, reject the request immediately
   if (!token) {
