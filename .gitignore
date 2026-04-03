@@ -39,7 +39,6 @@ inksubserver/*.cmake
 *.crt
 
 # ── IDE & Editor ──────────────────────────────────────────────────────────────
-.vscode/c_cpp_properties.json
 .vscode/*
 !.vscode/extensions.json
 !.vscode/c_cpp_properties.json
