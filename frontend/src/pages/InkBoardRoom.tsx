@@ -424,7 +424,7 @@ export default function WhiteboardRoom() {
   // ── Load board metadata ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!code) return;
-    fetch(buildPath(`api/boards/join/${code}`))
+    fetch(buildPath(`api/boards/${code}`))
       .then(r => r.json())
       .then(data => {
         if (data._id) {
@@ -850,7 +850,7 @@ export default function WhiteboardRoom() {
   // ── Copy room code ────────────────────────────────────────────────────────────
   const handleCopyCode = useCallback(() => {
     if (!code) return;
-    const url = `${window.location.origin}/board/${code}`;
+    const url = `${window.location.origin}/join/${code}`;
     navigator.clipboard.writeText(url);
     setCodeCopied(true);
     setTimeout(() => setCodeCopied(false), 2000);

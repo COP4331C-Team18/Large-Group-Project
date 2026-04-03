@@ -12,6 +12,7 @@ endif()
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
+find_package(CURL REQUIRED)
 
 #Generate compile_commands.json for clangd and other tools
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -90,6 +91,7 @@ target_link_libraries(inksubserver
     Threads::Threads
     ZLIB::ZLIB
     ${USOCKETS_LIB}
+    CURL::libcurl
 )
 
 if(TARGET nlohmann_json::nlohmann_json)

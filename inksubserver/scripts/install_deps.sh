@@ -11,6 +11,7 @@ sudo apt-get install -y \
     git \
     libssl-dev \
     zlib1g-dev \
+    libcurl4-openssl-dev \
     nlohmann-json3-dev
 
 # --- uSockets ---

@@ -40,7 +40,7 @@ const DashboardMain = () => {
   const handleOpenBoard = () => {
     if (selectedBoard) {
       // Changed to route to the new CRDT Whiteboard component for testing!
-      navigate(`/test-crdt/${selectedBoard.id || selectedBoard._id}`);
+      navigate(`/board/${selectedBoard.id || selectedBoard._id}`);
     }
   };
 

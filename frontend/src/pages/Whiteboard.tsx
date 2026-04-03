@@ -1,7 +1,7 @@
 import {
   useEffect, useLayoutEffect, useRef, useState, useCallback,
 } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import * as Y from 'yjs';
 import { IndexeddbPersistence } from 'y-indexeddb';
 
@@ -13,20 +13,20 @@ import WhiteboardHUD from '../components/whiteboard/WhiteboardHUD';
 // Utils and Types
 import { boardService } from '@/api/services/boardService';
 import type { Tool, Stroke, Viewport } from '../types/whiteboard';
-import { 
-  genId, screenToWorld, worldToScreen, renderStroke,
+import {
+  genId, screenToWorld, renderStroke,
   MIN_SCALE, MAX_SCALE
 } from '../utils/whiteboardUtils';
-
 export default function Whiteboard() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // Board metadata
   const [boardId, setBoardId] = useState<string | undefined>();
   const [boardTitle, setBoardTitle] = useState('Untitled Board');
   const [joinCode, setJoinCode] = useState<string | undefined>();
-  const [collabActive, setCollabActive] = useState(false);
+  const [, setCollabActive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -59,6 +59,10 @@ export default function Whiteboard() {
 
   // WebSocket ref for collab
   const wsRef = useRef<WebSocket | null>(null);
+  // Reconnect state — ref so closure in onclose always sees latest joinCode
+  const joinCodeRef = useRef<string | undefined>(undefined);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptsRef = useRef(0);
 
   // Pointer tracking
   const isDrawing = useRef(false);
@@ -190,28 +194,52 @@ export default function Whiteboard() {
   }, [loading]);
 
   // ── Load board metadata ───────────────────────────────────────────────────────
+  // Two paths:
+  //   ?collab=CODE  → guest/invited user, load via public join endpoint
+  //   no param      → board owner, load via protected endpoint
   useEffect(() => {
-    if (!id) return;
-    
-    boardService.getBoardById(id)
-      .then(data => {
-        if (data._id || data.id) {
-          const bid = data._id || data.id;
-          setBoardId(bid);
-          setBoardTitle(data.title || 'Untitled Board');
-        } else {
-          setError('Invalid board ID');
-        }
-      })
-      .catch(err => {
-        if (err.response?.status === 403) {
-          setError('Forbidden: You do not have access to this board.');
-        } else {
-          setError('Could not connect to server');
-        }
-      })
-      .finally(() => setLoading(false));
-  }, [id]);
+    const collabCode = searchParams.get('collab');
+
+    if (collabCode) {
+      boardService.joinBoardByCode(collabCode)
+        .then(data => {
+          if (data._id || data.id) {
+            const bid = data._id || data.id;
+            setBoardId(bid);
+            setBoardTitle(data.title || 'Untitled Board');
+            setJoinCode(collabCode);
+          } else {
+            setError('Invalid room code');
+          }
+        })
+        .catch(() => setError('Invalid room code'))
+        .finally(() => setLoading(false));
+    } else if (id) {
+      boardService.getBoardById(id)
+        .then(data => {
+          if (data._id || data.id) {
+            const bid = data._id || data.id;
+            setBoardId(bid);
+            setBoardTitle(data.title || 'Untitled Board');
+            // Restore the board's stable join code for the collab button
+            if (data.joinCode) setJoinCode(data.joinCode);
+          } else {
+            setError('Invalid board ID');
+          }
+        })
+        .catch(err => {
+          if (err.response?.status === 403) {
+            setError('Forbidden: You do not have access to this board.');
+          } else {
+            setError('Could not connect to server');
+          }
+        })
+        .finally(() => setLoading(false));
+    }
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps -- searchParams intentionally excluded
+
+  // Keep joinCodeRef in sync so the WS onclose closure always sees the latest code
+  useEffect(() => { joinCodeRef.current = joinCode; }, [joinCode]);
 
   // ── Setup Yjs Subscriptions ───────────────────────────────────────────────────
   useEffect(() => {
@@ -562,7 +590,7 @@ export default function Whiteboard() {
   // ── Copy room code ────────────────────────────────────────────────────────────
   const handleCopyCode = useCallback(() => {
     if (!joinCode) return;
-    const url = `${window.location.origin}/board/${joinCode}`;
+    const url = `${window.location.origin}/join/${joinCode}`;
     navigator.clipboard.writeText(url);
     setCodeCopied(true);
     setTimeout(() => setCodeCopied(false), 2000);
@@ -572,35 +600,47 @@ export default function Whiteboard() {
   const connectToCollabServer = useCallback((sessionId: string) => {
     if (wsRef.current) return; // already connected
 
+    const response = boardService.setJoinCode(boardId!, sessionId);
+    response.then(() => {
+      console.log('Join code set successfully');
+      setJoinCode(sessionId);
+      setStatusMsg('success to set join code');
+    }).catch(() => {
+      setStatusMsg('Failed to set join code');
+      setTimeout(() => setStatusMsg(''), 3000);
+    });
+
     const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:9001';
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
-
     ws.binaryType = 'arraybuffer';
 
     ws.onopen = () => {
-      // Send join request
       ws.send(JSON.stringify({ type: 'join', sessionId }));
       setStatusMsg('Connecting to room...');
     };
 
     ws.onmessage = (event) => {
       if (typeof event.data === 'string') {
-        // JSON protocol messages
         const msg = JSON.parse(event.data);
         if (msg.type === 'joined' && msg.ok) {
+          reconnectAttemptsRef.current = 0;
           setCollabActive(true);
           setStatusMsg('Collab active');
           setTimeout(() => setStatusMsg(''), 2500);
-
-          // Now that we're joined, send our current Yjs state to sync peers
+          // Send our full Y js state so existing peers can apply it
           const state = Y.encodeStateAsUpdate(ydocRef.current);
           ws.send(state);
         } else if (msg.type === 'userCount') {
+          // Re-broadcast full state whenever a new peer joins so they hydrate
+          if (msg.count > 1 && ws.readyState === WebSocket.OPEN) {
+            const state = Y.encodeStateAsUpdate(ydocRef.current);
+            ws.send(state);
+          }
           setUserCount(msg.count);
         }
       } else {
-        // Binary — incoming Yjs update from a peer (tagged 'remote' to avoid echo)
+        // Binary — Yjs update from a peer; tag 'remote' to suppress echo
         const update = new Uint8Array(event.data);
         Y.applyUpdate(ydocRef.current, update, 'remote');
       }
@@ -610,43 +650,61 @@ export default function Whiteboard() {
       wsRef.current = null;
       setCollabActive(false);
       setUserCount(1);
-      setStatusMsg('Disconnected from room');
-      setTimeout(() => setStatusMsg(''), 3000);
+      const code = joinCodeRef.current;
+      if (code) {
+        // Exponential backoff reconnect (1s → 2s → 4s … max 30s)
+        const delay = Math.min(30000, 1000 * Math.pow(2, reconnectAttemptsRef.current));
+        reconnectAttemptsRef.current++;
+        setStatusMsg(`Reconnecting in ${Math.round(delay / 1000)}s…`);
+        reconnectTimerRef.current = setTimeout(() => {
+          connectToCollabServer(code);
+        }, delay);
+      } else {
+        setStatusMsg('Disconnected from room');
+        setTimeout(() => setStatusMsg(''), 3000);
+      }
     };
 
     ws.onerror = () => {
       ws.close();
-      setJoinCode(undefined);
-      setStatusMsg('Failed to connect');
+      setStatusMsg('Connection error');
       setTimeout(() => setStatusMsg(''), 3000);
     };
-  }, []);
+  }, [boardId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Forward local Yjs updates to WebSocket when collab is active
+  // Always-on Yjs update forwarder — checks WS state internally, no dependency on collabActive
   useEffect(() => {
-    if (!collabActive) return;
-
     const onUpdate = (update: Uint8Array, origin: any) => {
-      // Only send local changes (not updates we received from peers)
       if (origin !== 'remote' && wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(update);
       }
     };
-
     ydocRef.current.on('update', onUpdate);
     return () => { ydocRef.current.off('update', onUpdate); };
-  }, [collabActive]);
-
-  // Cleanup WebSocket on unmount
-  useEffect(() => {
-    return () => { wsRef.current?.close(); };
   }, []);
 
+  // Cleanup WebSocket and reconnect timer on unmount
+  useEffect(() => {
+    return () => {
+      wsRef.current?.close();
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    };
+  }, []);
+
+  // Auto-connect when arriving via ?collab=CODE (must be after connectToCollabServer is defined)
+  useEffect(() => {
+    if (!boardId || !joinCode) return;
+    const collabCode = searchParams.get('collab');
+    if (collabCode && collabCode === joinCode) {
+      connectToCollabServer(joinCode);
+    }
+  }, [boardId, joinCode, connectToCollabServer]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Connect using the board's stable joinCode (set by owner or loaded from board data)
   const handleCollab = useCallback(() => {
-    const hexCode = Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0').toUpperCase();
-    setJoinCode(hexCode);
-    connectToCollabServer(hexCode);
-  }, [connectToCollabServer]);
+    const codeToUse = joinCode || Math.floor(100000 + Math.random() * 900000).toString();
+    connectToCollabServer(codeToUse);
+  }, [joinCode, connectToCollabServer]);
 
   // ── Cursor helper ─────────────────────────────────────────────────────────────
   function getCursor(t: Tool): string {

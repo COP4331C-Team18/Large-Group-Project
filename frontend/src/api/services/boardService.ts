@@ -21,6 +21,11 @@ export const boardService = {
     return response.data;
   },
 
+  setJoinCode: async (id: string, code: string) => {
+    const response = await api.post(`/boards/${id}/joinCode`, { joinCode: code });
+    return response.data;
+  },
+
   updateBoard: async (id: string, boardData: any) => {
     const response = await api.put(`/boards/${id}`, boardData);
     return response.data;

@@ -24,6 +24,38 @@ export const getMyBoards = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const setBoardJoinCode = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    const { joinCode } = req.body;
+
+    // Validate joinCode format (must be a 6-digit string)
+    if (!/^\d{6}$/.test(joinCode)) {
+      return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: 'Join code must be a 6-digit string' });
+    }
+
+    // Find the board and make sure the current user is the owner
+    const board = await Board.findOne({ _id: id, owner: userId });
+
+    if (!board) {
+      return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: 'Board not found or unauthorized' });
+    }
+
+    board.joinCode = joinCode;
+    await board.save();
+
+    return res.status(HTTPStatusCodes.OK).json(board);
+  } catch (err) {
+    console.error("Error setting join code:", err);
+    return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Server error setting join code' });
+  }
+};
+
 
 // GET /api/boards/join/:code
 // PUBLIC: Fetches a single board using its 6-digit access code
@@ -69,9 +101,6 @@ export const getBoardById = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Helper function to generate a 6-digit string
-const generateJoinCode = () => Math.floor(100000 + Math.random() * 900000).toString();
-
 // POST /api/boards
 // PROTECTED: Creates a new board for the logged-in user
 export const createBoard = async (req: AuthRequest, res: Response) => {
@@ -83,26 +112,12 @@ export const createBoard = async (req: AuthRequest, res: Response) => {
 
     const { title = 'Untitled Board', description = '', category = 'General' } = req.body;
 
-    let joinCode = generateJoinCode();
-    let isUnique = false;
-
-    // Ensure the 6-digit code doesn't already exist in the database
-    while (!isUnique) {
-      const existingBoard = await Board.findOne({ joinCode });
-      if (!existingBoard) {
-        isUnique = true;
-      } else {
-        joinCode = generateJoinCode(); // Try again if it exists
-      }
-    }
-
     // Create and save the new board
     const newBoard = new Board({
       title,
       description,
       category,
-      owner: userId,
-      joinCode
+      owner: userId
     });
 
     await newBoard.save();
@@ -147,6 +162,79 @@ export const updateBoard = async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error("Error updating board:", err);
     return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Server error updating board' });
+  }
+};
+
+// GET /api/boards/yjs/:sessionId
+// INTERNAL (inksubserver only): returns the stored binary Yjs state for a board
+export const getYjsState = async (req: Request, res: Response) => {
+  try {
+    const { sessionId } = req.params;
+    const board = await Board.findOne({ joinCode: sessionId });
+    if (!board) return res.status(404).json({ error: 'Board not found' });
+    if (!board.yjsUpdate || board.yjsUpdate.length === 0) return res.status(204).send();
+    res.set('Content-Type', 'application/octet-stream');
+    return res.send(board.yjsUpdate);
+  } catch (err) {
+    console.error('Error fetching Yjs state:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// POST /api/boards/yjs/:sessionId
+// INTERNAL: Appends binary Yjs updates to the board state
+export const saveYjsState = async (req: Request, res: Response) => {
+  try {
+    const { sessionId } = req.params;
+    const incomingBuffer = req.body; // Ensure express.raw() middleware is used
+
+    if (!Buffer.isBuffer(incomingBuffer) || incomingBuffer.length === 0) {
+      return res.status(400).json({ error: 'Invalid or empty body' });
+    }
+
+    // Use findOneAndUpdate with $set and $concat (or manual append)
+    const board = await Board.findOne({ joinCode: sessionId });
+    if (!board) return res.status(404).json({ error: 'Board not found' });
+
+    // APPEND logic: Combine existing data with new chunk
+    const existingUpdate = board.yjsUpdate || Buffer.alloc(0);
+    const combinedBuffer = Buffer.concat([existingUpdate, incomingBuffer]);
+
+    board.yjsUpdate = combinedBuffer;
+    
+    // Optional: Only push to revisions on "Last Leave" to save DB space, 
+    // or keep it here for granular history.
+    board.revisions.push({ 
+      yjsUpdate: incomingBuffer, 
+      userId: board.owner, 
+      savedAt: new Date() 
+    });
+
+    await board.save();
+    
+    console.log(`[api] Appended ${incomingBuffer.length} bytes to room ${sessionId}`);
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('Error saving Yjs state:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// POST /api/boards/yjs/:sessionId/close
+// INTERNAL (inksubserver only): sets the joinCode to null after room is empty for 5 minutes
+export const closeYjsRoom = async (req: Request, res: Response) => {
+  try {
+    const { sessionId } = req.params;
+    const board = await Board.findOne({ joinCode: sessionId });
+    if (!board) return res.status(404).json({ error: 'Board not found' });
+    
+    // Use undefined so Mongoose unsets the field, bypassing the unique constraint for multiple closed rooms
+    board.joinCode = undefined as any;
+    await board.save();
+    return res.status(200).json({ ok: true, message: 'Room closed' });
+  } catch (err) {
+    console.error('Error closing Yjs room:', err);
+    return res.status(500).json({ error: 'Server error' });
   }
 };
 
