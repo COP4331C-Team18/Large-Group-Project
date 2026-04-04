@@ -683,23 +683,31 @@ export default function Whiteboard() {
     return () => { ydocRef.current.off('update', onUpdate); };
   }, []);
 
+  // Tear down collab cleanly — clears joinCodeRef BEFORE closing so the
+  // onclose handler sees no code and skips the exponential-backoff reconnect.
+  // Without this, onclose fires async after unmount and spawns an orphaned connection.
+  const disconnectCollab = useCallback(() => {
+    joinCodeRef.current = undefined;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+  }, []);
+
   // Close WebSocket immediately when browser back/forward button is pressed
   useEffect(() => {
-    const handlePopState = () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+    window.addEventListener('popstate', disconnectCollab);
+    return () => window.removeEventListener('popstate', disconnectCollab);
+  }, [disconnectCollab]);
 
   // Cleanup WebSocket and reconnect timer on unmount
   useEffect(() => {
     return () => {
-      wsRef.current?.close();
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      disconnectCollab();
     };
   }, []);
 
@@ -773,10 +781,7 @@ export default function Whiteboard() {
         handleClear={handleClear}
         handleDownload={handleDownload}
         onBack={() => {
-          if (wsRef.current) {
-            wsRef.current.close();
-            wsRef.current = null;
-          }
+          disconnectCollab();
           navigate('/dashboard');
         }}
       />

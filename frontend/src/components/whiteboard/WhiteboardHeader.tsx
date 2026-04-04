@@ -184,7 +184,7 @@ const WhiteboardHeader: React.FC<WhiteboardHeaderProps> = ({
         {joinCode ? (
           <button
             onClick={handleCopyCode}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold text-[10px] tracking-widest uppercase transition shadow-sm hover:shadow-md bg-neutral text-[#c4a96a]"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold text-[10px] tracking-widest uppercase transition shadow-sm hover:shadow-md bg-secondary text-secondary-content"
             title="Copy invite link"
           >
             {codeCopied ? <Check size={11} /> : <Copy size={11} />}

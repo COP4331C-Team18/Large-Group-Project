@@ -38,10 +38,11 @@ const DashboardMain = () => {
   };
 
   const handleOpenBoard = () => {
-    if (selectedBoard) {
-      // Changed to route to the new CRDT Whiteboard component for testing!
-      navigate(`/board/${selectedBoard.id || selectedBoard._id}`);
-    }
+    if (!selectedBoard) return;
+    const id = selectedBoard.id || selectedBoard._id;
+    const joinCode = selectedBoard.joinCode;
+    // If a live collab session exists, join it directly — otherwise open offline
+    navigate(joinCode ? `/board/${id}?collab=${joinCode}` : `/board/${id}`);
   };
 
   const handleEditBoard = async () => {
