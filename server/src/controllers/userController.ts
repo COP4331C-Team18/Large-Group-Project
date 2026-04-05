@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import User from "../models/User.js";
+import bcrypt from 'bcryptjs';
 
 export const getAllUsers = async (req: Request, res: Response) => {
     try {
@@ -33,22 +34,24 @@ export const getUserById = async (req: Request, res: Response) => {
 export const updateUser = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { username } = req.body;
+        const { username, avatarId } = req.body;
 
-        if (!username) {
+        if (!username && !avatarId) {
             return res.status(400).json({ message: "Username is required" });
         }
 
         //Cannot change username to existing username
-        const existingUser = await User.findOne({ username });
-        if (existingUser) {
-            return res.status(409).json({ message: "Username already taken" });
+        if (username) {
+            const existingUser = await User.findOne({ username });
+            if (existingUser) {
+                return res.status(409).json({ message: "Username already taken" });
+            }
         }
 
         const updatedUser = await User.findByIdAndUpdate(
-        id,
-        { username },
-        { new: true }
+            id,
+            { ...(username && { username }), ...(avatarId && { avatarId }) },
+            { new: true }
         ).select("-password");
 
         if (!updatedUser) {
@@ -62,6 +65,31 @@ export const updateUser = async (req: Request, res: Response) => {
             return res.status(400).json({ message: "Invalid user ID" });
             }
         res.status(500).json({ message: "Error updating user" });
+    }
+};
+
+export const updatePassword = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { currentPassword, newPassword } = req.body;
+
+        const user = await User.findById(id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        // Verify current password
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) {
+            return res.status(401).json({ message: "Current password is incorrect" });
+        }
+
+        user.password = newPassword;
+        await user.save();
+
+        res.status(200).json({ message: "Password updated successfully" });
+    } catch (error) {
+        res.status(500).json({ message: "Error updating password" });
     }
 };
 
