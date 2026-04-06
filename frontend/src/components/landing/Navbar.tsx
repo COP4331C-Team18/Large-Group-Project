@@ -40,13 +40,6 @@ export default function Navbar() {
           GitHub
         </a>
 
-        <button
-            onClick={() => navigate('/settings')}
-            className="flex items-center gap-[0.4rem] font-sans text-[0.775rem] font-medium tracking-[0.06em] uppercase bg-primary text-primary-content px-[0.9rem] py-[0.45rem] rounded border-none transition-colors duration-200 hover:bg-primary/90"
-          >
-            View Settings
-          </button>
-
         {isAuthenticated ? (
           /* Show Dashboard button if logged in */
           <button
