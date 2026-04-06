@@ -40,6 +40,24 @@ export const protect = asyncHandler(async (req: Request, res: Response, next: Ne
                 });
             }
 
+
+            // issuing a new token and cookie with updated expiry (another 20 mins a sliding window) on every authenticated request for a protected route            
+            // 3. Issue a NEW token (sliding session window)
+            const newToken = jwt.sign(
+                { id: user._id, username: user.username },
+                process.env.JWT_SECRET as string,
+                { expiresIn: "20m" }
+            );
+
+            const isProd = process.env.PRODUCTION === "true";
+
+            res.cookie("token", newToken, {
+                httpOnly: true,
+                secure: isProd,
+                sameSite: isProd ? "none" : "lax",
+                maxAge: 20 * 60 * 1000, // 20 minutes
+            });
+            
             (req as any).user = user;            
             next();
         } catch (error) {
