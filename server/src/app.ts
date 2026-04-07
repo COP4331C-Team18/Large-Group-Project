@@ -1,8 +1,7 @@
 // Exporting the app separately from the server lets us 
 // cleanly import it for our tests without actually starting the server
 // Follows the exact same stuff as server.ts just moved here and without the http and Socket.io setup
-// Also loading the .env here so that it's available for the tests as well
-import 'dotenv/config';
+import "dotenv/config";
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';

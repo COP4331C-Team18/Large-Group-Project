@@ -14,6 +14,22 @@ jest.mock("postmark", () => {
   };
 });
 
+// Mock google auth library before app import so authController uses mocked functions
+jest.mock("google-auth-library", () => {
+  return {
+    OAuth2Client: jest.fn().mockImplementation(() => ({
+      verifyIdToken: jest.fn().mockResolvedValue({
+        getPayload: () => ({
+          email: "googleuser@example.com",
+          name: "Google User",
+          sub: "google12345678",
+        }),
+      }),
+    })),
+  };
+});
+
+
 import app from "../src/app";
 
 let mongo: MongoMemoryServer;

@@ -1,24 +1,17 @@
 import { api, User, Board } from "./setup";
 
-const signupVerifyAndLogin = async (username: string, email: string, password: string) => {
-  // Signup
-  await api.post("/api/auth/signup").send({
-    username,
-    email,
-    password,
-  });
+// Helper: signup → verify → login → return cookie
+const signupVerifyLogin = async (username: string, email: string, password: string) => {
+  await api.post("/api/auth/signup").send({ username, email, password });
 
-  // Get verification code from DB
   const user = await User.findOne({ email });
-  const verificationCode = user?.verificationCode;
+  const code = user?.verificationCode;
 
-  // Verify email
   await api.post("/api/auth/verify-email").send({
     email,
-    verificationCode,
+    verificationCode: code,
   });
 
-  // Login
   const loginRes = await api.post("/api/auth/login").send({
     login: email,
     password,
@@ -27,81 +20,182 @@ const signupVerifyAndLogin = async (username: string, email: string, password: s
   return loginRes.headers["set-cookie"];
 };
 
-describe("Boards API", () => {
-  it("should create a board", async () => {
-    const cookie = await signupVerifyAndLogin("john", "john@example.com", "password123");
+describe("BOARDS API", () => {
+  // ---------------------------------------------------------------------------
+  // CREATE BOARD
+  // ---------------------------------------------------------------------------
+  describe("Create Board", () => {
+    it("creates a board for the authenticated user", async () => {
+      const cookie = await signupVerifyLogin("john", "john@example.com", "Password123!");
 
-    const res = await api
-      .post("/api/boards")
-      .set("Cookie", cookie)
-      .send({ title: "My Board" });
+      const res = await api
+        .post("/api/boards")
+        .set("Cookie", cookie)
+        .send({ title: "My Board", description: "Test board", category: "General" });
 
-    expect(res.status).toBe(201);
-    expect(res.body.title).toBe("My Board");
-    expect(res.body.joinCode).toBeDefined();
+      expect(res.status).toBe(201);
+      expect(res.body.title).toBe("My Board");
+      expect(res.body.joinCode).toBeDefined();
+      expect(res.body.owner).toBeDefined();
+    });
+
+    it("rejects creation when not authenticated", async () => {
+      const res = await api.post("/api/boards").send({ title: "No Auth Board" });
+
+      expect(res.status).toBe(401);
+      expect(res.body).toHaveProperty("message");
+      expect(res.body.authenticated).toBe(false);
+    });
   });
 
-  it("should fetch user boards", async () => {
-    const cookie = await signupVerifyAndLogin("john", "john@example.com", "password123");
+  // ---------------------------------------------------------------------------
+  // GET MY BOARDS
+  // ---------------------------------------------------------------------------
+  describe("Get My Boards", () => {
+    it("returns only boards owned by the authenticated user", async () => {
+      const cookie = await signupVerifyLogin("john", "john@example.com", "Password123!");
 
-    await api.post("/api/boards").set("Cookie", cookie).send({ title: "Board 1" });
-    await api.post("/api/boards").set("Cookie", cookie).send({ title: "Board 2" });
+      await api.post("/api/boards").set("Cookie", cookie).send({ title: "Board 1" });
+      await api.post("/api/boards").set("Cookie", cookie).send({ title: "Board 2" });
 
-    const res = await api.get("/api/boards").set("Cookie", cookie);
+      const res = await api.get("/api/boards").set("Cookie", cookie);
 
-    expect(res.status).toBe(200);
-    expect(res.body.length).toBe(2);
-    expect(res.body[0].title).toMatch(/Board [1-2]/);
+      expect(res.status).toBe(200);
+      expect(res.body.length).toBe(2);
+    });
+
+    it("rejects fetching boards when not authenticated", async () => {
+      const res = await api.get("/api/boards");
+
+      expect(res.status).toBe(401);
+      expect(res.body).toHaveProperty("message");
+      expect(res.body.authenticated).toBe(false);
+    });
   });
 
-  it("should join a board by code", async () => {
-    const cookie = await signupVerifyAndLogin("john", "john@example.com", "password123");
+  // ---------------------------------------------------------------------------
+  // JOIN BOARD BY CODE
+  // ---------------------------------------------------------------------------
+  describe("Join Board by Code", () => {
+    it("joins a board using its 6-digit join code", async () => {
+      const cookie = await signupVerifyLogin("john", "john@example.com", "Password123!");
 
-    const created = await api
-      .post("/api/boards")
-      .set("Cookie", cookie)
-      .send({ title: "Joinable Board" });
+      const created = await api
+        .post("/api/boards")
+        .set("Cookie", cookie)
+        .send({ title: "Joinable Board" });
 
-    const joinCode = created.body.joinCode;
+      const joinCode = created.body.joinCode;
 
-    const res = await api.get(`/api/boards/join/${joinCode}`);
+      const res = await api.get(`/api/boards/join/${joinCode}`);
 
-    expect(res.status).toBe(200);
-    expect(res.body.title).toBe("Joinable Board");
+      expect(res.status).toBe(200);
+      expect(res.body.title).toBe("Joinable Board");
+    });
+
+    it("returns 404 for invalid join code", async () => {
+      const res = await api.get("/api/boards/join/999999");
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toContain("Invalid room code");
+    });
   });
 
-  it("should update a board", async () => {
-    const cookie = await signupVerifyAndLogin("john", "john@example.com", "password123");
+  // ---------------------------------------------------------------------------
+  // UPDATE BOARD
+  // ---------------------------------------------------------------------------
+  describe("Update Board", () => {
+    it("updates a board owned by the authenticated user", async () => {
+      const cookie = await signupVerifyLogin("john", "john@example.com", "Password123!");
 
-    const created = await api
-      .post("/api/boards")
-      .set("Cookie", cookie)
-      .send({ title: "Original Title" });
+      const created = await api
+        .post("/api/boards")
+        .set("Cookie", cookie)
+        .send({ title: "Original Title" });
 
-    const boardId = created.body._id;
+      const boardId = created.body._id;
 
-    const res = await api
-      .put(`/api/boards/${boardId}`)
-      .set("Cookie", cookie)
-      .send({ title: "Updated Title" });
+      const res = await api
+        .put(`/api/boards/${boardId}`)
+        .set("Cookie", cookie)
+        .send({ title: "Updated Title" });
 
-    expect(res.status).toBe(200);
-    expect(res.body.title).toBe("Updated Title");
+      expect(res.status).toBe(200);
+      expect(res.body.title).toBe("Updated Title");
+    });
+
+    it("rejects updating a board not owned by the user", async () => {
+      const cookieA = await signupVerifyLogin("john", "john@example.com", "Password123!");
+      const created = await api
+        .post("/api/boards")
+        .set("Cookie", cookieA)
+        .send({ title: "User A Board" });
+
+      const boardId = created.body._id;
+
+      const cookieB = await signupVerifyLogin("mary", "mary@example.com", "Password123!");
+
+      const res = await api
+        .put(`/api/boards/${boardId}`)
+        .set("Cookie", cookieB)
+        .send({ title: "Hacked Title" });
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toContain("Board not found or unauthorized");
+    });
+
+    it("rejects update when not authenticated", async () => {
+      const res = await api.put("/api/boards/123").send({ title: "No Auth" });
+
+      expect(res.status).toBe(401);
+      expect(res.body).toHaveProperty("message");
+      expect(res.body.authenticated).toBe(false);
+    });
   });
 
-  it("should delete a board", async () => {
-    const cookie = await signupVerifyAndLogin("john", "john@example.com", "password123");
+  // ---------------------------------------------------------------------------
+  // DELETE BOARD
+  // ---------------------------------------------------------------------------
+  describe("Delete Board", () => {
+    it("deletes a board owned by the authenticated user", async () => {
+      const cookie = await signupVerifyLogin("john", "john@example.com", "Password123!");
 
-    const created = await api
-      .post("/api/boards")
-      .set("Cookie", cookie)
-      .send({ title: "Board to Delete" });
+      const created = await api
+        .post("/api/boards")
+        .set("Cookie", cookie)
+        .send({ title: "Board to Delete" });
 
-    const boardId = created.body._id;
+      const boardId = created.body._id;
 
-    const res = await api.delete(`/api/boards/${boardId}`).set("Cookie", cookie);
+      const res = await api.delete(`/api/boards/${boardId}`).set("Cookie", cookie);
 
-    expect(res.status).toBe(200);
-    expect(res.body.message).toContain("deleted successfully");
+      expect(res.status).toBe(200);
+      expect(res.body.message).toContain("deleted successfully");
+    });
+
+    it("rejects deleting a board not owned by the user", async () => {
+      const cookieA = await signupVerifyLogin("john", "john@example.com", "Password123!");
+      const created = await api
+        .post("/api/boards")
+        .set("Cookie", cookieA)
+        .send({ title: "User A Board" });
+
+      const boardId = created.body._id;
+
+      const cookieB = await signupVerifyLogin("mary", "mary@example.com", "Password123!");
+
+      const res = await api.delete(`/api/boards/${boardId}`).set("Cookie", cookieB);
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toContain("Board not found or unauthorized");
+    });
+
+    it("rejects delete when not authenticated", async () => {
+      const res = await api.delete("/api/boards/123");
+
+      expect(res.status).toBe(401);
+      expect(res.body).toHaveProperty("message");
+      expect(res.body.authenticated).toBe(false);
+    });
   });
 });
