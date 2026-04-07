@@ -16,9 +16,9 @@ class HomeScreen extends StatelessWidget {
             left: 0,
             right: 0,
             child: SvgPicture.asset(
-              'assets/drip-1.svg',
+              'assets/drip.svg',
               width: double.infinity,
-              height: 175,
+              height: 190,
               fit: BoxFit.fitWidth,
             ),
           ),
@@ -30,7 +30,7 @@ class HomeScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
 
                   // ── Logo row ──────────────────────────────────────
                   Row(
@@ -42,6 +42,7 @@ class HomeScreen extends StatelessWidget {
                         'InkBoard',
                         style: Theme.of(context).textTheme.displayLarge?.copyWith(letterSpacing: -0.5,)
                       ),
+                      const SizedBox(width: 0),
                     ],
                   ),
 
@@ -51,8 +52,8 @@ class HomeScreen extends StatelessWidget {
                   Text(
                     'GET STARTED FOR FREE',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      letterSpacing: 1.5, 
-                      color: AppColors.mossLight,
+                      letterSpacing: 1.25, 
+                      color: AppColors.moss,
                       fontWeight: FontWeight.w700,
                       ),  
                   ),
@@ -71,21 +72,24 @@ class HomeScreen extends StatelessWidget {
                         style: Theme.of(context).textTheme.displayLarge?.copyWith(
                           fontStyle: FontStyle.italic,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.moss,
+                          color: AppColors.forest,
+                          letterSpacing: 1.5,
                         ),
                       ),
                       Text(
-                        ' ink',
-                        style: Theme.of(context).textTheme.displayLarge  
+                        ' ink.',
+                        style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                          letterSpacing: 1.5,
+                        )  
                       ),
-                  ],
-                ), 
+                    ],
+                  ), 
 
                   const SizedBox(height: 10),
 
                   Image.asset('assets/home-icon.png', height: 300),
 
-                  const Spacer(),
+                  const SizedBox(height: 16),
 
                   // ── LOG IN button ──
                   SizedBox(
@@ -136,20 +140,16 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
 
                   // ── SIGN UP button ──
                   SizedBox(
                     width: double.infinity,
                     height: 52,
-                    child: OutlinedButton(
+                    child: ElevatedButton(
                       onPressed: () => Navigator.pushNamed(context, '/signup'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.ink,
-                        side: const BorderSide(
-                          color: AppColors.capMid,
-                          width: 1.5,
-                        ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.sageLight,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(30),
                         ),
@@ -165,7 +165,31 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 20),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "Have a room code?  ",
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      GestureDetector(
+                        onTap: () => Navigator.pushNamed(context, '/join-room'),
+                        child: Text(
+                          'Join instantly',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.moss,
+                            fontWeight: FontWeight.w700,
+                            decoration: TextDecoration.underline,
+                            decorationColor: AppColors.moss,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
