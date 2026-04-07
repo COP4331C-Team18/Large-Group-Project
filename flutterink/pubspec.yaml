@@ -59,6 +59,7 @@ flutter:
     - assets/home-icon.png
     - assets/login-icon.png
     - assets/drip.svg
+    - assets/signup-icon.png
 
   fonts:
     - family: Lora
