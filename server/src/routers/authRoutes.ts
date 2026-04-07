@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { signup, login, verifyEmail, googleOAuth, resendVerification, getCurrentUser, logout } from "../controllers/authController.js";
-import { protect } from "../middleware/jwtProtect.js";
+import { signup, login, verifyEmail, googleOAuth, resendVerification, getCurrentUser, logout } from "../controllers/authController";
+import { protect } from "../middleware/jwtProtect";
 
 const router = Router();
 

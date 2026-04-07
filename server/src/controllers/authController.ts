@@ -1,7 +1,7 @@
 import { OAuth2Client } from "google-auth-library";
-import User from "../models/User.js";
-import { signAccessToken } from "../utils/jwtUtils.js";
-import { HTTPStatusCodes } from "../utils/statusCodes.js";
+import User from "../models/User";
+import { signAccessToken } from "../utils/jwtUtils";
+import { HTTPStatusCodes } from "../utils/statusCodes";
 import { Request, Response } from "express";
 import * as postmark from "postmark";
 

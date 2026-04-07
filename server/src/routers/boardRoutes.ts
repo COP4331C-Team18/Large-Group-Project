@@ -1,6 +1,6 @@
 import express from 'express';
-import { getMyBoards, joinBoardByCode, createBoard, updateBoard, deleteBoard } from '../controllers/boardController.js';
-import { protect } from '../middleware/jwtProtect.js';
+import { getMyBoards, joinBoardByCode, createBoard, updateBoard, deleteBoard } from '../controllers/boardController';
+import { protect } from '../middleware/jwtProtect';
 
 const router = express.Router();
 
