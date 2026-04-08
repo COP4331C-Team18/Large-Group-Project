@@ -38,9 +38,11 @@ const DashboardMain = () => {
   };
 
   const handleOpenBoard = () => {
-    if (selectedBoard) {
-      navigate(`/board/${selectedBoard.id || selectedBoard._id}`);
-    }
+    if (!selectedBoard) return;
+    const id = selectedBoard.id || selectedBoard._id;
+    const joinCode = selectedBoard.joinCode;
+    // If a live collab session exists, join it directly — otherwise open offline
+    navigate(joinCode ? `/board/${id}?collab=${joinCode}` : `/board/${id}`);
   };
 
   const handleEditBoard = async () => {
@@ -59,8 +61,10 @@ const DashboardMain = () => {
     if (!window.confirm("Are you sure you want to delete this board?")) return;
     try {
       await boardService.deleteBoard(selectedId);
+      // Remove the card and close the modal in the same render so Framer Motion's
+      // shared layoutId has no card to animate back to during the exit animation.
+      setBoards(prev => prev.filter(b => String(b.id || b._id) !== selectedId));
       setSelectedId(null);
-      fetchBoards();
     } catch (error) {
       console.error("Error deleting board:", error);
     }
