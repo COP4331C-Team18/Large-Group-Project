@@ -89,7 +89,7 @@ export default function HeroSection() {
         {/* Sub */}
         <p className="font-sans text-[1.1rem] font-light text-base-content/60 max-w-[480px] mx-auto mb-11 leading-[1.75]">
           InkBoard is a real-time digital whiteboard for teams. Sketch, annotate, and
-          plan together — share a 6-digit code and anyone joins instantly.
+          plan together — share a 6-character code and anyone joins instantly.
         </p>
 
         {/* Code join widget */}

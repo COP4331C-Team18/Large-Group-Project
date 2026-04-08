@@ -1,6 +1,7 @@
 import {
   useEffect, useLayoutEffect, useRef, useState, useCallback,
 } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import * as Y from 'yjs';
 import { IndexeddbPersistence } from 'y-indexeddb';
@@ -14,13 +15,28 @@ import WhiteboardHUD from '../components/whiteboard/WhiteboardHUD';
 import { boardService } from '@/api/services/boardService';
 import type { Tool, Stroke, Viewport } from '../types/whiteboard';
 import {
-  genId, screenToWorld, renderStroke,
+  genId, screenToWorld, worldToScreen, renderStroke,
   MIN_SCALE, MAX_SCALE
 } from '../utils/whiteboardUtils';
+
+
+// Deterministic cursor color from userId
+function userColor(userId: string): string {
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) {
+    hash = (hash << 5) - hash + userId.charCodeAt(i);
+    hash |= 0;
+  }
+  return `hsl(${Math.abs(hash) % 360}, 65%, 45%)`;
+}
+
+type RemoteCursor = { x: number; y: number; username: string; lastSeen: number };
+
 export default function Whiteboard() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { user } = useAuth();
 
   // Board metadata
   const [boardId, setBoardId] = useState<string | undefined>();
@@ -63,6 +79,12 @@ export default function Whiteboard() {
   const joinCodeRef = useRef<string | undefined>(undefined);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
+
+  // Cursor overlay
+  const remoteCursorsRef = useRef<Map<string, RemoteCursor>>(new Map());
+  const lastCursorSendRef = useRef(0);
+  // Stable anonymous ID for this browser session
+  const anonIdRef = useRef(`anon_${Math.random().toString(16).slice(2, 8)}`);
 
   // Pointer tracking
   const isDrawing = useRef(false);
@@ -151,6 +173,48 @@ export default function Whiteboard() {
     for (const s of strokes) {
       renderStroke(ctx, s, vp);
     }
+
+    // Draw remote cursors on top of strokes
+    const nowMs = Date.now();
+    remoteCursorsRef.current.forEach((cursor, uid) => {
+      if (nowMs - cursor.lastSeen > 3000) return; // gone stale, skip
+      const { x: sx, y: sy } = worldToScreen(cursor.x, cursor.y, vp);
+      const col = userColor(uid);
+
+      ctx.save();
+
+      // Arrow pointer shape
+      ctx.fillStyle = col;
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(sx,      sy);
+      ctx.lineTo(sx + 10, sy + 14);
+      ctx.lineTo(sx + 4,  sy + 12);
+      ctx.lineTo(sx + 2,  sy + 20);
+      ctx.lineTo(sx - 1,  sy + 19);
+      ctx.lineTo(sx + 1,  sy + 11);
+      ctx.lineTo(sx - 4,  sy + 11);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Name label pill
+      ctx.font = 'bold 11px Raleway, sans-serif';
+      const label = cursor.username;
+      const tw = ctx.measureText(label).width;
+      const pad = 5;
+      const lx = sx + 13;
+      const ly = sy + 14;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.roundRect(lx - pad, ly - 12, tw + pad * 2, 17, 4);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillText(label, lx, ly);
+
+      ctx.restore();
+    });
 
   }, []);
 
@@ -408,6 +472,14 @@ export default function Whiteboard() {
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const { sx, sy } = getCanvasPos(e.nativeEvent);
 
+    // Throttled cursor broadcast (~30fps)
+    const nowMs = Date.now();
+    if (wsRef.current?.readyState === WebSocket.OPEN && nowMs - lastCursorSendRef.current > 33) {
+      lastCursorSendRef.current = nowMs;
+      const { x, y } = screenToWorld(sx, sy, vpRef.current);
+      wsRef.current.send(JSON.stringify({ type: 'cursor', x, y }));
+    }
+
     if (isPanning.current && panStart.current) {
       const ps = panStart.current;
       vpRef.current = {
@@ -616,7 +688,9 @@ export default function Whiteboard() {
     ws.binaryType = 'arraybuffer';
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'join', sessionId }));
+      const userId   = user?.id       ?? anonIdRef.current;
+      const username = user?.username ?? 'Guest';
+      ws.send(JSON.stringify({ type: 'join', sessionId, userId, username }));
       setStatusMsg('Connecting to room...');
     };
 
@@ -628,7 +702,7 @@ export default function Whiteboard() {
           setCollabActive(true);
           setStatusMsg('Collab active');
           setTimeout(() => setStatusMsg(''), 2500);
-          // Send our full Y js state so existing peers can apply it
+          // Send our full Yjs state so existing peers can apply it
           const state = Y.encodeStateAsUpdate(ydocRef.current);
           ws.send(state);
         } else if (msg.type === 'userCount') {
@@ -638,6 +712,17 @@ export default function Whiteboard() {
             ws.send(state);
           }
           setUserCount(msg.count);
+        } else if (msg.type === 'cursor') {
+          remoteCursorsRef.current.set(msg.userId, {
+            x: msg.x,
+            y: msg.y,
+            username: msg.username,
+            lastSeen: Date.now(),
+          });
+          needsRender.current = true;
+        } else if (msg.type === 'error') {
+          setStatusMsg(msg.message || 'Connection error');
+          setTimeout(() => setStatusMsg(''), 3000);
         }
       } else {
         // Binary — Yjs update from a peer; tag 'remote' to suppress echo
@@ -696,6 +781,8 @@ export default function Whiteboard() {
       wsRef.current.close();
       wsRef.current = null;
     }
+    remoteCursorsRef.current.clear();
+    needsRender.current = true;
   }, []);
 
   // Close WebSocket immediately when browser back/forward button is pressed
@@ -721,10 +808,24 @@ export default function Whiteboard() {
   }, [boardId, joinCode, connectToCollabServer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Connect using the board's stable joinCode (set by owner or loaded from board data)
-  const handleCollab = useCallback(() => {
-    const codeToUse = joinCode || Math.floor(100000 + Math.random() * 900000).toString();
-    connectToCollabServer(codeToUse);
-  }, [joinCode, connectToCollabServer]);
+  const handleCollab = useCallback(async () => {
+    if (joinCode) {
+      connectToCollabServer(joinCode);
+      return;
+    }
+    // No join code yet — generate one, persist it to MongoDB, then connect
+    const newCode = Array.from({ length: 6 }, () =>
+      Math.floor(Math.random() * 16).toString(16)
+    ).join('').toUpperCase();
+    try {
+      await boardService.setJoinCode(boardId!, newCode);
+      setJoinCode(newCode);
+      connectToCollabServer(newCode);
+    } catch {
+      setStatusMsg('Failed to create collab room');
+      setTimeout(() => setStatusMsg(''), 3000);
+    }
+  }, [joinCode, boardId, connectToCollabServer]);
 
   // ── Cursor helper ─────────────────────────────────────────────────────────────
   function getCursor(t: Tool): string {

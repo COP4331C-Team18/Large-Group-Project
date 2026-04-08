@@ -8,7 +8,9 @@
 #include <atomic>
 
 struct PerSocketData {
-    std::string sessionId;   // room this socket belongs to (empty = no room)
+    std::string sessionId;  // room this socket belongs to (empty = no room)
+    std::string userId;     // opaque user id ("anon_xxxx" for guests)
+    std::string username;   // display name shown on remote cursors
 };
 
 // --- Connection ---
@@ -62,7 +64,7 @@ private:
 
     // HTTP helpers — run on background threads, must not hold mutex_
     void persistRoomState(const std::string& sessionId, std::vector<std::string> buffer);
-    std::string fetchRoomState(const std::string& sessionId);
+    std::string fetchRoomState(const std::string& sessionId, long& httpCodeOut);
     void closeJoinCode(const std::string& sessionId);
 
     // Yjs update framing: length-prefix each binary update so they can be
