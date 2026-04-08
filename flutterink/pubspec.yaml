@@ -55,6 +55,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/mushroom-icon.png
+    - assets/google-icon.png
     - assets/home-icon.png
     - assets/login-icon.png
     - assets/drip.svg

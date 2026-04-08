@@ -30,6 +30,10 @@ class AppColors {
 
   // Mist
   static const mist        = Color(0xFFD8D4CA);
+
+  // Accent Drip
+  static const sage        = Color(0xFF999F89); 
+  static const sageLight   = Color(0x99999F89);
 }
 
 // ── InkBoard ThemeData ───────────────────────────────────────────────────────
