@@ -31,9 +31,12 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  dio: ^5.9.2          # HTTP client for making API requests
+  provider: ^6.1.2     # State management (like Context API)
+  google_fonts: ^6.2.1        # Raleway (body) + Lora (headings) — matches web frontend
+  shared_preferences: ^2.3.2   # Persist onboarding + login flags across app launches
+  web_socket_channel: ^3.0.1  # WebSocket connection to C++ collab server
 
 dev_dependencies:
   flutter_test:

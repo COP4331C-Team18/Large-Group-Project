@@ -34,10 +34,13 @@ export const setBoardJoinCode = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { joinCode } = req.body;
 
-    // Validate joinCode format (must be a 6-digit string)
-    if (!/^\d{6}$/.test(joinCode)) {
-      return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: 'Join code must be a 6-digit string' });
+    // Validate joinCode format (must be a 6-character hex string, e.g. "3F2A1B")
+    if (!/^[0-9A-Fa-f]{6}$/.test(joinCode)) {
+      return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: 'Join code must be a 6-character hex code' });
     }
+
+    // Normalize to uppercase before saving
+    const normalizedCode = joinCode.toUpperCase();
 
     // Find the board and make sure the current user is the owner
     const board = await Board.findOne({ _id: id, owner: userId });
@@ -46,7 +49,7 @@ export const setBoardJoinCode = async (req: AuthRequest, res: Response) => {
       return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: 'Board not found or unauthorized' });
     }
 
-    board.joinCode = joinCode;
+    board.joinCode = normalizedCode;
     await board.save();
 
     return res.status(HTTPStatusCodes.OK).json(board);

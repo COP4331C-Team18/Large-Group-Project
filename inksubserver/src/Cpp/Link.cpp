@@ -100,7 +100,8 @@ void LinkManager<SSL>::persistRoomState(const std::string& sessionId,
 }
 
 template<bool SSL>
-std::string LinkManager<SSL>::fetchRoomState(const std::string& sessionId) {
+std::string LinkManager<SSL>::fetchRoomState(const std::string& sessionId, long& httpCodeOut) {
+    httpCodeOut = 0;
     if (apiConfig_.url.empty()) return {};
 
     CURL* curl = curl_easy_init();
@@ -123,8 +124,7 @@ std::string LinkManager<SSL>::fetchRoomState(const std::string& sessionId) {
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
 
     CURLcode res = curl_easy_perform(curl);
-    long httpCode = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCodeOut);
 
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
@@ -133,9 +133,13 @@ std::string LinkManager<SSL>::fetchRoomState(const std::string& sessionId) {
         std::cerr << "[http] fetch failed: " << curl_easy_strerror(res) << "\n";
         return {};
     }
-    if (httpCode == 204 || httpCode == 404) return {}; // no stored state
-    if (httpCode != 200) {
-        std::cerr << "[http] fetch HTTP " << httpCode << " for " << sessionId << "\n";
+    // 204 = board exists but no Yjs data yet (valid, new room)
+    if (httpCodeOut == 204) return {};
+    // 404 = no board with this joinCode in MongoDB (caller handles rejection)
+    if (httpCodeOut == 404) return {};
+
+    if (httpCodeOut != 200) {
+        std::cerr << "[http] fetch HTTP " << httpCodeOut << " for " << sessionId << "\n";
         return {};
     }
 
@@ -293,6 +297,8 @@ void LinkManager<SSL>::onMessage(WSSocket* ws, std::string_view message, uWS::Op
 
         auto* data = static_cast<PerSocketData*>(ws->getUserData());
         data->sessionId = sessionId;
+        data->userId    = msg.value("userId",   "anon_" + sessionId.substr(0, 4));
+        data->username  = msg.value("username", "Guest");
 
         auto& room = rooms_[sessionId];
         bool isFirstMember = room.members.empty();
@@ -315,7 +321,27 @@ void LinkManager<SSL>::onMessage(WSSocket* ws, std::string_view message, uWS::Op
         if (isFirstMember && !apiConfig_.url.empty()) {
             auto* loop = uWS::Loop::get();
             std::thread([this, sessionId, ws, loop]() {
-                std::string blob = fetchRoomState(sessionId);
+                long httpCode = 0;
+                std::string blob = fetchRoomState(sessionId, httpCode);
+
+                // 404 = no board with this joinCode in MongoDB — reject the room
+                if (httpCode == 404) {
+                    std::cerr << "[room] rejected unknown room: " << sessionId << "\n";
+                    loop->defer([this, sessionId, ws]() {
+                        std::lock_guard<std::mutex> lk(mutex_);
+                        // Kick the socket
+                        if (connections_.find(ws) != connections_.end()) {
+                            ws->send(R"({"type":"error","message":"invalid room code"})",
+                                     uWS::OpCode::TEXT);
+                            ws->close();
+                        }
+                        // Remove the room entirely so it leaves no trace in memory
+                        rooms_.erase(sessionId);
+                    });
+                    return;
+                }
+
+                // 204 = valid room but no Yjs data yet — nothing to hydrate
                 if (blob.empty()) return;
 
                 std::vector<std::string> updates = deserializeUpdates(blob);
@@ -340,6 +366,22 @@ void LinkManager<SSL>::onMessage(WSSocket* ws, std::string_view message, uWS::Op
             }).detach();
         }
 
+        return;
+    }
+
+    if (type == "cursor") {
+        auto* data = static_cast<PerSocketData*>(ws->getUserData());
+        if (data->sessionId.empty()) return;
+
+        // Inject server-stored identity so peers can't spoof each other's names
+        json broadcast = {
+            {"type",     "cursor"},
+            {"userId",   data->userId},
+            {"username", data->username},
+            {"x",        msg.value("x", 0.0)},
+            {"y",        msg.value("y", 0.0)},
+        };
+        broadcastToRoom(data->sessionId, broadcast.dump(), ws);
         return;
     }
 
