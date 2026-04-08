@@ -35,6 +35,12 @@ export default {
       "cupcake",
       "retro",
       "pastel",
+      "cmyk",
+      "nord",
+      "dracula",
+      "dark",
+      "dim",
+      "coffee",
       {
         inkboard: {
           'primary':          '#4a5a3a',   // moss
