@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '@/api/services/authService';
 interface User {
   id: string;
@@ -21,6 +21,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
+
+
+  // Listening for the auth-expired event dispatched by the global 401 axios interceptor
+  useEffect(() => {
+    const handleExpire = () => {
+      logout();
+    };
+
+    window.addEventListener("auth-expired", handleExpire);
+    return () => window.removeEventListener("auth-expired", handleExpire);
+  }, []);
+
+
 
   // On mount: Check if we have an active session cookie
   useEffect(() => {
@@ -38,6 +52,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
     checkSession();
   }, []);
+
+  // Revalidate session on route change
+  useEffect(() => {
+    const revalidate = async () => { 
+      try {
+        const data = await authService.me();
+        setUser(data.authenticated ? data.user : null);
+      } catch (err) {
+        setUser(null);
+      }
+    };
+
+    if (!loading) {
+      revalidate();
+    }
+  }, [location.pathname, loading]);
 
   // Login handler to update context state and navigate to dashboard
   const login = (userData: User) => {
