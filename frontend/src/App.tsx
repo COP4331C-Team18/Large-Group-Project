@@ -5,6 +5,7 @@ import LoginPage from '@/pages/LoginPage';
 import SignupPage from '@/pages/SignUpPage';
 import PrivateRoutes from '@/config/privateRoutes';
 import WhiteboardRoom from '@/pages/InkBoardRoom';
+import SettingsPage from '@/pages/SettingsPage';
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
         {/* Private Routes needs authentication */}
         <Route element={<PrivateRoutes />} >
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>
     </div>
