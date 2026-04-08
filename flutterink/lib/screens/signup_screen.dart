@@ -2,28 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutterink/theme/inkboard_theme.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class SignupScreen extends StatefulWidget {
+  const SignupScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<SignupScreen> createState() => _SignupScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _SignupScreenState extends State<SignupScreen> {
+  final _emailController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
+    _emailController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  void _handleSignIn() {
+  void _handleCreateAccount() {
     final username = _usernameController.text.trim();
     final password = _passwordController.text.trim();
+
     if (username.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -35,6 +41,31 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       return;
     }
+
+    if (password.length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Password must be at least 10 characters'),
+          backgroundColor: AppColors.soil,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      return;
+    }
+
+    if (password != _confirmPasswordController.text.trim()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Passwords do not match'),
+          backgroundColor: AppColors.soil,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      return;
+    }
+
     /* !!! CONNECT TO BACKEND AUTH HERE !!! && IMPLEMENT DASHBOARD SCREEN
     final success = await AuthService.login(username, password);
     if (success) {
@@ -44,8 +75,14 @@ class _LoginScreenState extends State<LoginScreen> {
         SnackBar(content: const Text('Invalid username or password')),
       );
     } */
-
-    Navigator.pushReplacementNamed(context, '/home');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Create account coming soon'),
+        backgroundColor: AppColors.soil,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
   }
 
   void _handleGoogle() {
@@ -115,13 +152,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 65),
 
-                  Image.asset("assets/login-icon.png", height: 225),
+                  Image.asset("assets/signup-icon.png", height: 150),
 
                   const SizedBox(height: 10),
 
                   // ── Welcome heading ──────────────────────────────────
                   Text(
-                    'WELCOME BACK',
+                    "LET'S GET STARTED",
                     style: Theme.of(context).textTheme.displayMedium?.copyWith(
                       fontFamily: 'Raleway',
                       fontWeight: FontWeight.w800,
@@ -133,10 +170,38 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 24),
 
-                  // ── Username field ───────────────────────────────────
+                  // ── Email field ──
+                  TextField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Email',
+                      hintStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.capMid,
+                      ),
+                      filled: true,
+                      fillColor: AppColors.sageLight,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // ── Username field ──
                   TextField(
                     controller: _usernameController,
-                    keyboardType: TextInputType.emailAddress,
+                    keyboardType: TextInputType.text,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -161,7 +226,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 12),
 
-                  // ── Password field ───────────────────────────────────
+                  // ── Password field ──
                   TextField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
@@ -199,14 +264,53 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
 
+                  const SizedBox(height: 12),
+
+                  // ── Confirm Password field ──
+                  TextField(
+                    controller: _confirmPasswordController,
+                    obscureText: _obscureConfirmPassword,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Confirm Password',
+                      hintStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.capMid,
+                      ),
+                      filled: true,
+                      fillColor: AppColors.sageLight,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          color: AppColors.stem,
+                          size: 20,
+                        ),
+                        onPressed: () => setState(
+                          () => _obscureConfirmPassword = !_obscureConfirmPassword,
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 20),
 
-                  // ── Sign In button ───────────────────────────────────
+                  // ── Create Account button ───────────────────────────────────
                   SizedBox(
                     width: double.infinity,
                     height: 52,
                     child: ElevatedButton(
-                      onPressed: _handleSignIn,
+                      onPressed: _handleCreateAccount,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.moss,
                         foregroundColor: AppColors.stemLight,
@@ -216,44 +320,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       child: Text(
-                        'SIGN IN',
+                        'CREATE ACCOUNT',
                         style: Theme.of(context).textTheme.labelLarge,
                       ),
                     ),
                   ),
 
                   const SizedBox(height: 15),
-
-                  // ── Forgot password ──────────────────────────────────
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton(
-                      onPressed: () {
-                        // !!! IMPLEMENT FORGOT PASSWORD FLOW HERE !!!
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text('Forgot password screen coming soon'),
-                            backgroundColor: AppColors.soil,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        );
-                      },
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: Text(
-                        'Forgot Password?',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
 
                   // ── OR divider ───────────────────────────────────────
                   Row(
@@ -320,13 +393,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        "Don't have an account?  ",
+                        "Already have an account?  ",
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       GestureDetector(
-                        onTap: () => Navigator.pushNamed(context, '/signup'),
+                        onTap: () => Navigator.pushNamed(context, '/login'),
                         child: Text(
-                          'Create Free Account',
+                          'Sign In',
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: AppColors.moss,
                             fontWeight: FontWeight.w700,

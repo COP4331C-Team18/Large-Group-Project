@@ -9,6 +9,7 @@ export interface UserDocument extends Document {
   verificationCode: string | null;
   verificationCodeExpires: Date | null;
   provider: "inkboard" | "google";
+  avatarId: string;
   comparePassword(candidate: string): Promise<boolean>;
 }
 
@@ -57,6 +58,12 @@ const userSchema = new Schema<UserDocument>(
       type: String,
       enum: ["inkboard", "google"],
       default: "inkboard",
+    },
+
+    // avatar preset id
+    avatarId: {
+      type: String,
+      default: "default",
     },
   },
   { timestamps: true }
