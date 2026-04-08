@@ -34,8 +34,8 @@ int main() {
     if (config["ssl"]["enabled"]) {
         LinkManager<true> links(apiConfig);
         uWS::SSLApp({
-            .cert_file_name = config["ssl"]["cert"].get<std::string>().c_str(),
-            .key_file_name  = config["ssl"]["key"].get<std::string>().c_str()
+            .key_file_name  = config["ssl"]["key"].get<std::string>().c_str(),
+            .cert_file_name = config["ssl"]["cert"].get<std::string>().c_str()
         }).ws<PerSocketData>("/*", {
             /* Settings */
             .compression = uWS::DISABLED,
