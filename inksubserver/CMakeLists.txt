@@ -86,11 +86,11 @@ add_executable(inksubserver
 # --- LINK ---
 target_link_libraries(inksubserver
     PRIVATE
-    ${USOCKETS_LIB}
     OpenSSL::SSL
     OpenSSL::Crypto
     Threads::Threads
     ZLIB::ZLIB
+    ${USOCKETS_LIB}
     CURL::libcurl
 )
 
