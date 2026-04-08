@@ -1,0 +1,11 @@
+CompileFlags:
+  Remove:
+    - -std=gnu++17                                        # replaced below so clangd handles designated initializers
+    - -isystem /opt/homebrew/Cellar/openssl@3/*/include  # versioned path breaks on brew upgrade
+  Add:
+    - -std=c++20
+    - -Wno-deprecated-declarations                        # suppress OpenSSL 3.x deprecation noise from uSockets
+    - -isystem /opt/homebrew/opt/openssl@3/include        # stable symlink, survives brew upgrades
+
+Diagnostics:
+  UnusedIncludes: None                                    # uWebSockets pulls in many indirect headers

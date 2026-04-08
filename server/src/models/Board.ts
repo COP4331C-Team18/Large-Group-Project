@@ -68,7 +68,7 @@ const boardSchema = new Schema<BoardDocument>(
 		joinCode: {
 			type: String,
 			required: false,
-			unique: true,
+			unique: false,
 			index: true,
 			sparse: true,
 		},

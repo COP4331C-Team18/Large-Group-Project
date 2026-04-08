@@ -1,22 +1,39 @@
-import express from 'express';
-import { getMyBoards, joinBoardByCode, createBoard, updateBoard, deleteBoard } from '../controllers/boardController.js';
+import express, { Request, Response, NextFunction } from 'express';
+import { getMyBoards, joinBoardByCode, createBoard, updateBoard, deleteBoard, getBoardById, getYjsState, saveYjsState, setBoardJoinCode, closeYjsRoom } from '../controllers/boardController.js';
 import { protect } from '../middleware/jwtProtect.js';
+import { set } from 'mongoose';
 
 const router = express.Router();
 
-// Protected route to fetch user's boards
-router.get('/', protect, getMyBoards);
+// ── Internal middleware: only inksubserver may call /yjs/* routes ──────────────
+const yjsInternalAuth = (req: Request, res: Response, next: NextFunction) => {
+  const secret = process.env.INTERNAL_SECRET;
+  if (!secret || req.headers['x-internal-secret'] !== secret) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  return next();
+};
 
-// Protected route to CREATE a new board
-router.post('/', protect, createBoard);
+// ── Internal Yjs persistence routes (called by inksubserver, not by browsers) ──
+// Must be declared before /:id to avoid Express matching "yjs" as an id param.
+router.get('/yjs/:sessionId', yjsInternalAuth, getYjsState);
+router.post(
+  '/yjs/:sessionId',
+  yjsInternalAuth,
+  express.raw({ type: 'application/octet-stream', limit: '50mb' }),
+  saveYjsState,
+);
+router.post('/yjs/:sessionId/close', yjsInternalAuth, closeYjsRoom);
 
-// Protected route to UPDATE a board
-router.put('/:id', protect, updateBoard);
-
-// Protected route to DELETE a board
-router.delete('/:id', protect, deleteBoard);
-
-// PUBLIC route for joining via 6-digit code
+// ── Public route for joining via 6-digit code ─────────────────────────────────
 router.get('/join/:code', joinBoardByCode);
+
+// ── Protected board CRUD ──────────────────────────────────────────────────────
+router.post('/:id/joinCode', protect, setBoardJoinCode);
+router.get('/', protect, getMyBoards);
+router.post('/', protect, createBoard);
+router.get('/:id', protect, getBoardById);
+router.put('/:id', protect, updateBoard);
+router.delete('/:id', protect, deleteBoard);
 
 export default router;

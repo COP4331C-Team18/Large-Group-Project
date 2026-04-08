@@ -1,0 +1,1 @@
+This folder Contains a uWebsocket server that needs to act as an array between my MongoDB database and yJS frontend drawing logic which will ultimately will create a room structure to keep people synced in a room with a code
