@@ -7,6 +7,7 @@ import PrivateRoutes from '@/config/privateRoutes';
 import JoinBoard from '@/pages/JoinBoard';
 import Whiteboard from '@/pages/Whiteboard';
 import ProfilePage from '@/pages/ProfilePage';
+import SettingsPage from '@/pages/SettingsPage';
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
         <Route element={<PrivateRoutes />} >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/profile" element={<ProfilePage />} /> 
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>
     </div>
