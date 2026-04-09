@@ -50,9 +50,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      // TODO: Navigate to your dashboard/home screen
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Welcome back, ${user.username}!')),
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const EnterCodeScreen()),
+        (_) => false,
       );
     } catch (e) {
       setState(() {
