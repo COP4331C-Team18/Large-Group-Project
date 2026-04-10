@@ -64,10 +64,10 @@ export const setBoardJoinCode = async (req: AuthRequest, res: Response) => {
 // PUBLIC: Fetches a single board using its 6-digit access code
 export const joinBoardByCode = async (req: Request, res: Response) => {
   try {
-    const { code } = req.params;
-    
-    // Find the board with this exact 6-digit code
-    const board = await Board.findOne({ joinCode: code });
+    const code = Array.isArray(req.params.code) ? req.params.code[0] : req.params.code;
+
+    // Find the board with this exact 6-digit code (normalise to uppercase to match stored format)
+    const board = await Board.findOne({ joinCode: code.toUpperCase() });
     
     if (!board) {
       return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: 'Invalid room code.' });

@@ -1,3 +1,6 @@
+import { Fragment, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 // Large inkcap mushroom SVG — decorative background element
 function MushroomLarge() {
   return (
@@ -40,6 +43,46 @@ function MushroomSmall() {
 }
 
 export default function HeroSection() {
+  const navigate = useNavigate();
+  const [digits, setDigits] = useState<string[]>(Array(6).fill(''));
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const handleChange = (i: number, val: string) => {
+    const clean = val.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    if (!clean) {
+      setDigits(prev => { const n = [...prev]; n[i] = ''; return n; });
+      return;
+    }
+    const ch = clean.slice(-1);
+    setDigits(prev => { const n = [...prev]; n[i] = ch; return n; });
+    if (i < 5) inputRefs.current[i + 1]?.focus();
+  };
+
+  const handleKeyDown = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !digits[i] && i > 0) {
+      e.preventDefault();
+      inputRefs.current[i - 1]?.focus();
+    }
+    if (e.key === 'Enter') handleJoin();
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const raw = e.clipboardData.getData('text').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6);
+    const next = Array(6).fill('');
+    for (let i = 0; i < raw.length; i++) next[i] = raw[i];
+    setDigits(next);
+    inputRefs.current[Math.min(raw.length, 5)]?.focus();
+  };
+
+  const handleJoin = () => {
+    const code = digits.join(''); // digits are already uppercased on input
+    if (code.length < 6) return;
+    navigate(`/join/${code}`);
+  };
+
+  const isComplete = digits.every(d => d !== '');
+
   return (
     <section
       className="
@@ -50,7 +93,6 @@ export default function HeroSection() {
       {/* Bottom green-fade overlay */}
       <div
         className="absolute bottom-0 left-0 right-0 h-48 pointer-events-none z-[1] bg-gradient-to-t from-[#4a5a3a12] to-transparent"
-        
       />
 
       {/* Large inkcap — right side */}
@@ -105,43 +147,55 @@ export default function HeroSection() {
             Have a room code? Join instantly
           </p>
 
-          {/* Digit boxes */}
+          {/* Digit input boxes */}
           <div className="flex items-center gap-[0.4rem]">
-            {['4', '8', '2', null, '9', '1', '7'].map((d, i) =>
-              d === null ? (
-                <span key={i} className="text-primary-content w-3 text-center">·</span>
-              ) : (
-                <div
-                  key={i}
-                  className="
-                    relative w-10 h-[52px] bg-base-100
-                    border border-primary rounded-[3px]
-                    flex items-center justify-center
-                    font-serif text-2xl font-semibold text-base-content
-                  "
-                >
-                  {d}
+            {digits.map((d, i) => (
+              <Fragment key={i}>
+                {i === 3 && (
+                  <span className="text-primary-content w-3 text-center select-none">·</span>
+                )}
+                <div className="relative">
+                  <input
+                    ref={el => { inputRefs.current[i] = el; }}
+                    value={d}
+                    onChange={e => handleChange(i, e.target.value)}
+                    onKeyDown={e => handleKeyDown(i, e)}
+                    onPaste={handlePaste}
+                    onFocus={e => e.target.select()}
+                    maxLength={2}
+                    className="
+                      w-10 h-[52px] bg-base-100
+                      border border-primary rounded-[3px]
+                      text-center caret-transparent
+                      font-serif text-2xl font-semibold text-base-content
+                      focus:outline-none focus:ring-1 focus:ring-primary
+                    "
+                  />
                   {/* Mini drip */}
                   <span
                     className="absolute left-1/2 -translate-x-1/2 w-[3px] h-[6px] bg-primary rounded-b-full opacity-30 top-full"
                   />
                 </div>
-              )
-            )}
+              </Fragment>
+            ))}
           </div>
 
           {/* Enter code button */}
           <button
-            onClick={() => {}}
-            className="
+            onClick={handleJoin}
+            disabled={!isComplete}
+            className={`
               w-full flex items-center justify-center gap-2
               font-sans text-[0.72rem] font-semibold tracking-[0.1em] uppercase
               text-primary-content bg-primary/60
               border border-primary rounded-[3px]
               px-6 py-[0.55rem]
               transition-colors duration-200
-              hover:bg-primary/90 hover:border-primary/40 hover:text-primary-content
-            "
+              ${isComplete
+                ? 'hover:bg-primary/90 hover:border-primary/40 hover:text-primary-content cursor-pointer'
+                : 'opacity-50 cursor-not-allowed'
+              }
+            `}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />

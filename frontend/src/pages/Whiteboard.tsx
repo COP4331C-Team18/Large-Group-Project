@@ -83,8 +83,11 @@ export default function Whiteboard() {
   // Cursor overlay
   const remoteCursorsRef = useRef<Map<string, RemoteCursor>>(new Map());
   const lastCursorSendRef = useRef(0);
-  // Stable anonymous ID for this browser session
-  const anonIdRef = useRef(`anon_${Math.random().toString(16).slice(2, 8)}`);
+  const localMouseScreenRef = useRef<{ x: number; y: number } | null>(null);
+  // Stable anonymous ID and display name for this browser session
+  // toString(36) gives 0-9 + a-z; slice(2,8) picks 6 chars after the "0."
+  const anonSuffixRef = useRef(Math.random().toString(36).slice(2, 8).toUpperCase());
+  const anonIdRef = useRef(`anon_${anonSuffixRef.current.toLowerCase()}`);
 
   // Pointer tracking
   const isDrawing = useRef(false);
@@ -176,6 +179,7 @@ export default function Whiteboard() {
 
     // Draw remote cursors on top of strokes
     const nowMs = Date.now();
+    const mouse = localMouseScreenRef.current;
     remoteCursorsRef.current.forEach((cursor, uid) => {
       if (nowMs - cursor.lastSeen > 3000) return; // gone stale, skip
       const { x: sx, y: sy } = worldToScreen(cursor.x, cursor.y, vp);
@@ -183,35 +187,43 @@ export default function Whiteboard() {
 
       ctx.save();
 
-      // Arrow pointer shape
+      // Arrow cursor matching the local SVG cursor shape (tip origin at sx, sy)
+      // SVG path: M2 1 L2 15 L5.5 11.5 L8.5 18 L10.5 17 L7.5 10.5 L13 10.5 Z  (origin 2,1)
       ctx.fillStyle = col;
       ctx.strokeStyle = 'rgba(255,255,255,0.85)';
       ctx.lineWidth = 1.5;
+      ctx.lineJoin = 'round';
       ctx.beginPath();
-      ctx.moveTo(sx,      sy);
-      ctx.lineTo(sx + 10, sy + 14);
-      ctx.lineTo(sx + 4,  sy + 12);
-      ctx.lineTo(sx + 2,  sy + 20);
-      ctx.lineTo(sx - 1,  sy + 19);
-      ctx.lineTo(sx + 1,  sy + 11);
-      ctx.lineTo(sx - 4,  sy + 11);
+      ctx.moveTo(sx,           sy);          // tip
+      ctx.lineTo(sx,           sy + 14);     // bottom of left side
+      ctx.lineTo(sx + 3.5,     sy + 10.5);   // inner notch
+      ctx.lineTo(sx + 6.5,     sy + 17);     // tail bottom
+      ctx.lineTo(sx + 8.5,     sy + 16);     // tail right edge
+      ctx.lineTo(sx + 5.5,     sy + 9.5);    // inner notch right
+      ctx.lineTo(sx + 11,      sy + 9.5);    // right side of body
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
 
-      // Name label pill
-      ctx.font = 'bold 11px Raleway, sans-serif';
-      const label = cursor.username;
-      const tw = ctx.measureText(label).width;
-      const pad = 5;
-      const lx = sx + 13;
-      const ly = sy + 14;
-      ctx.fillStyle = col;
-      ctx.beginPath();
-      ctx.roundRect(lx - pad, ly - 12, tw + pad * 2, 17, 4);
-      ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.fillText(label, lx, ly);
+      // Name label — visible when local mouse is over the cursor arrow's bounding box
+      // Arrow occupies roughly (sx, sy) → (sx+11, sy+17); add 4px padding for easy targeting
+      const hovered = mouse !== null &&
+        mouse.x >= sx - 4 && mouse.x <= sx + 15 &&
+        mouse.y >= sy - 4 && mouse.y <= sy + 21;
+      if (hovered) {
+        ctx.font = 'bold 11px Raleway, sans-serif';
+        const label = cursor.username;
+        const tw = ctx.measureText(label).width;
+        const pad = 5;
+        const lx = sx + 14;
+        const ly = sy + 13;
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.roundRect(lx - pad, ly - 12, tw + pad * 2, 17, 4);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillText(label, lx, ly);
+      }
 
       ctx.restore();
     });
@@ -472,6 +484,18 @@ export default function Whiteboard() {
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const { sx, sy } = getCanvasPos(e.nativeEvent);
 
+    // Track local mouse screen position for cursor label proximity detection
+    localMouseScreenRef.current = { x: sx, y: sy };
+
+    // Re-render when mouse enters or leaves the cursor's hover area so the label snaps on/off
+    const vp = vpRef.current;
+    remoteCursorsRef.current.forEach((cursor) => {
+      const { x: cx, y: cy } = worldToScreen(cursor.x, cursor.y, vp);
+      const nearX = sx >= cx - 8 && sx <= cx + 19;
+      const nearY = sy >= cy - 8 && sy <= cy + 25;
+      if (nearX && nearY) needsRender.current = true;
+    });
+
     // Throttled cursor broadcast (~30fps)
     const nowMs = Date.now();
     if (wsRef.current?.readyState === WebSocket.OPEN && nowMs - lastCursorSendRef.current > 33) {
@@ -512,6 +536,7 @@ export default function Whiteboard() {
 
   // ── Pointer up ────────────────────────────────────────────────────────────────
   const onPointerUp = useCallback((_e: React.PointerEvent<HTMLCanvasElement>) => {
+    localMouseScreenRef.current = null;
     if (isPanning.current) {
       isPanning.current = false;
       panStart.current = null;
@@ -672,15 +697,9 @@ export default function Whiteboard() {
   const connectToCollabServer = useCallback((sessionId: string) => {
     if (wsRef.current) return; // already connected
 
-    const response = boardService.setJoinCode(boardId!, sessionId);
-    response.then(() => {
-      console.log('Join code set successfully');
-      setJoinCode(sessionId);
-      setStatusMsg('success to set join code');
-    }).catch(() => {
-      setStatusMsg('Failed to set join code');
-      setTimeout(() => setStatusMsg(''), 3000);
-    });
+    // NOTE: do NOT call boardService.setJoinCode here.
+    // For owners, the code is persisted by handleCollab before this is called.
+    // For guests, this is a protected endpoint they cannot call (would return 401).
 
     const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:9001';
     const ws = new WebSocket(WS_URL);
@@ -689,7 +708,7 @@ export default function Whiteboard() {
 
     ws.onopen = () => {
       const userId   = user?.id       ?? anonIdRef.current;
-      const username = user?.username ?? 'Guest';
+      const username = user?.username ?? `Anon${anonSuffixRef.current}`;
       ws.send(JSON.stringify({ type: 'join', sessionId, userId, username }));
       setStatusMsg('Connecting to room...');
     };
@@ -704,12 +723,12 @@ export default function Whiteboard() {
           setTimeout(() => setStatusMsg(''), 2500);
           // Send our full Yjs state so existing peers can apply it
           const state = Y.encodeStateAsUpdate(ydocRef.current);
-          ws.send(state);
+          ws.send(state.buffer.slice(state.byteOffset, state.byteOffset + state.byteLength) as ArrayBuffer);
         } else if (msg.type === 'userCount') {
           // Re-broadcast full state whenever a new peer joins so they hydrate
           if (msg.count > 1 && ws.readyState === WebSocket.OPEN) {
             const state = Y.encodeStateAsUpdate(ydocRef.current);
-            ws.send(state);
+            ws.send(state.buffer.slice(state.byteOffset, state.byteOffset + state.byteLength) as ArrayBuffer);
           }
           setUserCount(msg.count);
         } else if (msg.type === 'cursor') {
@@ -761,7 +780,7 @@ export default function Whiteboard() {
   useEffect(() => {
     const onUpdate = (update: Uint8Array, origin: any) => {
       if (origin !== 'remote' && wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(update);
+        wsRef.current.send(update.buffer.slice(update.byteOffset, update.byteOffset + update.byteLength) as ArrayBuffer);
       }
     };
     ydocRef.current.on('update', onUpdate);
@@ -828,10 +847,13 @@ export default function Whiteboard() {
   }, [joinCode, boardId, connectToCollabServer]);
 
   // ── Cursor helper ─────────────────────────────────────────────────────────────
+  // Solid black arrow cursor matching the navigation-arrow style
+  const ARROW_CURSOR = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 15 L5.5 11.5 L8.5 18 L10.5 17 L7.5 10.5 L13 10.5 Z' fill='%23000000'/%3E%3C/svg%3E\") 2 1, auto";
+
   function getCursor(t: Tool): string {
     if (t === 'pan') return 'grab';
     if (t === 'eraser') return 'cell';
-    return 'crosshair';
+    return ARROW_CURSOR;
   }
 
   // ── Loading / error screens ───────────────────────────────────────────────────
