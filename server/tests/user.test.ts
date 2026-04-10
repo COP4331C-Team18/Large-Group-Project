@@ -64,14 +64,14 @@ describe("USERS API", () => {
       const res = await api.get(`/api/users/${fakeId}`);
 
       expect(res.status).toBe(404);
-      expect(res.body.message).toContain("User not found");
+      expect(res.body.message).toBe("User not found");
     });
 
     it("returns 400 for invalid ID format", async () => {
       const res = await api.get("/api/users/invalid-id");
 
       expect(res.status).toBe(400);
-      expect(res.body.message).toContain("Invalid user ID");
+      expect(res.body.message).toBe("Invalid user ID");
     });
   });
 
@@ -108,7 +108,7 @@ describe("USERS API", () => {
       const res = await api.put(`/api/users/${user._id}/username`).send({});
 
       expect(res.status).toBe(400);
-      expect(res.body.message).toContain("Username is required");
+      expect(res.body.message).toBe("Username is required");
     });
 
     it("rejects duplicate username", async () => {
@@ -133,7 +133,7 @@ describe("USERS API", () => {
         .send({ username: "existing" });
 
       expect(res.status).toBe(409);
-      expect(res.body.message).toContain("Username already taken");
+      expect(res.body.message).toBe("Username already taken");
     });
 
     it("returns 404 when updating non‑existent user", async () => {
@@ -144,7 +144,7 @@ describe("USERS API", () => {
         .send({ username: "newname" });
 
       expect(res.status).toBe(404);
-      expect(res.body.message).toContain("User not found");
+      expect(res.body.message).toBe("User not found");
     });
 
     it("returns 400 for invalid ID format", async () => {
@@ -153,7 +153,78 @@ describe("USERS API", () => {
         .send({ username: "newname" });
 
       expect(res.status).toBe(400);
-      expect(res.body.message).toContain("Invalid user ID");
+      expect(res.body.message).toBe("Invalid user ID");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // UPDATE PASSWORD
+  // ---------------------------------------------------------------------------
+  describe("PUT /api/users/:id/password", () => {
+    it("updates password when current password is correct", async () => {
+      const user = await User.create({
+        username: "john",
+        email: "john@example.com",
+        password: "oldpass123",
+        provider: "inkboard",
+        verified: true,
+      });
+
+      const res = await api
+        .put(`/api/users/${user._id}/password`)
+        .send({ currentPassword: "oldpass123", newPassword: "newpass456" });
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe("Password updated successfully");
+
+      const updated = await User.findById(user._id);
+      const matches = await updated!.comparePassword("newpass456");
+      expect(matches).toBe(true);
+    });
+
+    it("rejects incorrect current password", async () => {
+      const user = await User.create({
+        username: "john",
+        email: "john@example.com",
+        password: "correctpass",
+        provider: "inkboard",
+        verified: true,
+      });
+
+      const res = await api
+        .put(`/api/users/${user._id}/password`)
+        .send({ currentPassword: "wrongpass", newPassword: "newpass" });
+
+      expect(res.status).toBe(401);
+      expect(res.body.message).toBe("Current password is incorrect");
+    });
+
+    it("returns 404 when updating password for non‑existent user", async () => {
+      const fakeId = "64b0c9f4f4f4f4f4f4f4f4f4";
+
+      const res = await api
+        .put(`/api/users/${fakeId}/password`)
+        .send({ currentPassword: "old", newPassword: "new" });
+
+      expect(res.status).toBe(404);
+      expect(res.body.message).toBe("User not found");
+    });
+
+    it("returns 500 when missing fields", async () => {
+      const user = await User.create({
+        username: "john",
+        email: "john@example.com",
+        password: "oldpass",
+        provider: "inkboard",
+        verified: true,
+      });
+
+      const res = await api
+        .put(`/api/users/${user._id}/password`)
+        .send({});
+
+      expect(res.status).toBe(500);
+      expect(res.body.message).toBe("Error updating password");
     });
   });
 
@@ -173,7 +244,7 @@ describe("USERS API", () => {
       const res = await api.delete(`/api/users/${user._id}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.message).toContain("User deleted");
+      expect(res.body.message).toBe("User deleted");
 
       const deleted = await User.findById(user._id);
       expect(deleted).toBeNull();
@@ -185,14 +256,14 @@ describe("USERS API", () => {
       const res = await api.delete(`/api/users/${fakeId}`);
 
       expect(res.status).toBe(404);
-      expect(res.body.message).toContain("User not found");
+      expect(res.body.message).toBe("User not found");
     });
 
     it("returns 400 for invalid ID format", async () => {
       const res = await api.delete("/api/users/invalid-id");
 
       expect(res.status).toBe(400);
-      expect(res.body.message).toContain("Invalid user ID");
+      expect(res.body.message).toBe("Invalid user ID");
     });
   });
 });

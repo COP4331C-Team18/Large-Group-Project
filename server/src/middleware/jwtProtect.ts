@@ -1,61 +1,74 @@
 import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
+import User from '../models/User';
 import { Request, Response, NextFunction } from 'express';
-import { asyncHandler } from '../utils/asyncHandler.js';
-
+import { asyncHandler } from '../utils/asyncHandler';
 
 interface JwtPayload {
-    id: string;
-    username: string;
+  id: string;
+  username: string;
 }
 
 export const protect = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-    
-    // 1. Look for the token in the cookies instead of the header
-    const token = req.cookies.token;
+  const token = req.cookies.token;
 
-    if (token) {
-        try {
-            // 2. Verify the token
-            const decoded = jwt.verify(
-                token, 
-                process.env.JWT_SECRET as string
-            ) as JwtPayload;
-
-            // 3. Admin logic (unchanged)
-            if(!decoded.id || !decoded.username) {
-                res.status(401).json({
-                    authenticated: false,
-                    message: 'Not authorized, invalid token payload'
-                });
-            }
-
-            // 4. Find the user and attach to req.user
-            const user = await User.findById(decoded.id).select('-password');
-
-            if (!user) {
-                res.status(401).json({
-                    authenticated: false,
-                    message: 'User no longer exists'
-                });
-            }
-
-            (req as any).user = user;            
-            next();
-        } catch (error) {
-            // Print the error for debugging but still send a generic message to the client
-            console.error(`JWT VERIFICATION ERROR: ${error}`);
-            res.status(401).json({
-                authenticated: false,
-                message: 'Not authorized, token failed'
-            });
-        }
-    } else {
-        // 5. If no cookie is found: 
-        // We send the 401 but DO NOT throw an Error to avoid terminal spam.
-        res.status(401).json({ 
-            authenticated: false,
-            message: 'Not authorized, token failed or expired' 
-        });
+  // No token at all
+  if (!token) {
+    // Special case: /auth/me must return authenticated: false
+    if (req.originalUrl.endsWith("/me")) {
+      return res.status(401).json({ authenticated: false });
     }
+
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  try {
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET as string
+    ) as JwtPayload;
+
+    if (!decoded.id || !decoded.username) {
+      if (req.originalUrl.endsWith("/me")) {
+        return res.status(401).json({ authenticated: false });
+      }
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const user = await User.findById(decoded.id).select("-password");
+
+    if (!user) {
+      if (req.originalUrl.endsWith("/me")) {
+        return res.status(401).json({ authenticated: false });
+      }
+      return res.status(401).json({ error: "User ID missing" });
+    }
+
+    // Sliding session refresh — issue new 20m token
+    const newToken = jwt.sign(
+      { id: user._id, username: user.username },
+      process.env.JWT_SECRET as string,
+      { expiresIn: "20m" }
+    );
+
+    const isProd = process.env.PRODUCTION === "true";
+
+    res.cookie("token", newToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
+      maxAge: 20 * 60 * 1000,
+    });
+
+    (req as any).user = user;
+    return next();
+
+  } catch (error) {
+    console.error(`JWT VERIFICATION ERROR: ${error}`);
+
+    if (req.originalUrl.endsWith("/me")) {
+      return res.status(401).json({ authenticated: false });
+    }
+
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 });

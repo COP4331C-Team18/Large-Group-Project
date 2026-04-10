@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
-import { getMyBoards, joinBoardByCode, createBoard, updateBoard, deleteBoard, getBoardById, getYjsState, saveYjsState, setBoardJoinCode, closeYjsRoom } from '../controllers/boardController.js';
-import { protect } from '../middleware/jwtProtect.js';
+import { getMyBoards, joinBoardByCode, createBoard, updateBoard, deleteBoard, getBoardById, getYjsState, saveYjsState, setBoardJoinCode, closeYjsRoom } from '../controllers/boardController';
+import { protect } from '../middleware/jwtProtect';
 import { set } from 'mongoose';
 
 const router = express.Router();
