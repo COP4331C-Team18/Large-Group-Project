@@ -34,5 +34,19 @@ export const boardService = {
   deleteBoard: async (id: string) => {
     const response = await api.delete(`/boards/${id}`);
     return response.data;
-  }
+  },
+
+  // Wipes all stroke data (Stroke docs + yjsUpdate blob) for a board.
+  clearBoardStrokes: async (id: string) => {
+    const response = await api.delete(`/boards/${id}/strokes`);
+    return response.data;
+  },
+
+  // Replaces the stored Yjs binary state with a compact snapshot so erasures persist.
+  saveCompactYjsState: async (id: string, data: ArrayBuffer) => {
+    const response = await api.put(`/boards/${id}/yjs`, data, {
+      headers: { 'Content-Type': 'application/octet-stream' },
+    });
+    return response.data;
+  },
 };

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import Board from '../models/Board.js'; // Make sure you saved the Board.ts model we updated earlier!
+import Stroke from '../models/Stroke.js';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import { HTTPStatusCodes } from '../utils/statusCodes.js';
 
@@ -223,6 +224,57 @@ export const saveYjsState = async (req: Request, res: Response) => {
   }
 };
 
+// DELETE /api/boards/:id/strokes
+// PROTECTED: Wipes all stroke data for a board (Stroke collection + yjsUpdate blob).
+// Called by the owner after pressing "Clear canvas".
+export const clearBoardStrokes = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: 'Unauthorized' });
+
+    const { id } = req.params;
+    const board = await Board.findOne({ _id: id, owner: userId });
+    if (!board) return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: 'Board not found or unauthorized' });
+
+    board.yjsUpdate = Buffer.alloc(0);
+    board.revisions = [];
+    await board.save();
+    await Stroke.deleteMany({ boardId: id });
+
+    return res.status(HTTPStatusCodes.OK).json({ ok: true });
+  } catch (err) {
+    console.error('Error clearing board strokes:', err);
+    return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Server error' });
+  }
+};
+
+// PUT /api/boards/:id/yjs
+// PROTECTED: Replaces the stored Yjs binary state with a compact snapshot.
+// Called by the owner after an erase gesture to ensure deletions are persisted.
+export const saveCompactYjsState = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: 'Unauthorized' });
+
+    const { id } = req.params;
+    const board = await Board.findOne({ _id: id, owner: userId });
+    if (!board) return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: 'Board not found or unauthorized' });
+
+    const body = req.body;
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: 'Invalid or empty body' });
+    }
+
+    board.yjsUpdate = body;
+    await board.save();
+
+    return res.status(HTTPStatusCodes.OK).json({ ok: true });
+  } catch (err) {
+    console.error('Error saving compact Yjs state:', err);
+    return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Server error' });
+  }
+};
+
 // POST /api/boards/yjs/:sessionId/close
 // INTERNAL (inksubserver only): sets the joinCode to null after room is empty for 5 minutes
 export const closeYjsRoom = async (req: Request, res: Response) => {
@@ -258,6 +310,9 @@ export const deleteBoard = async (req: AuthRequest, res: Response) => {
     if (!board) {
       return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: 'Board not found or unauthorized' });
     }
+
+    // Cascade-delete all strokes belonging to this board
+    await Stroke.deleteMany({ boardId: id });
 
     return res.status(HTTPStatusCodes.OK).json({ message: 'Board deleted successfully' });
   } catch (err) {

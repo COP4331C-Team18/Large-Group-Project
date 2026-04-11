@@ -85,3 +85,90 @@ export function renderStroke(
 
   ctx.restore();
 }
+
+// ── Eraser hit-test helpers ───────────────────────────────────────────────────
+
+function pointSegmentDist(
+  px: number, py: number,
+  ax: number, ay: number,
+  bx: number, by: number,
+): number {
+  const dx = bx - ax, dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < 1e-10) return Math.hypot(px - ax, py - ay);
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+  return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+}
+
+/**
+ * Returns true if the eraser brush (circle of worldRadius) touches `stroke`.
+ * All coordinates are in world space.
+ */
+export function strokeHitsPoint(
+  stroke: Stroke,
+  wx: number, wy: number,
+  worldRadius: number,
+): boolean {
+  const r = worldRadius + (stroke.width ?? 1) / 2;
+
+  if (stroke.points) {
+    const pts = stroke.points;
+    if (pts.length < 2) return false;
+    if (pts.length === 2) return Math.hypot(wx - pts[0], wy - pts[1]) <= r;
+    for (let i = 0; i < pts.length - 2; i += 2) {
+      if (pointSegmentDist(wx, wy, pts[i], pts[i + 1], pts[i + 2], pts[i + 3]) <= r) return true;
+    }
+    return false;
+  }
+
+  const x0 = stroke.x0!, y0 = stroke.y0!, x1 = stroke.x1!, y1 = stroke.y1!;
+
+  if (stroke.tool === 'line') {
+    return pointSegmentDist(wx, wy, x0, y0, x1, y1) <= r;
+  }
+  if (stroke.tool === 'rect') {
+    return (
+      pointSegmentDist(wx, wy, x0, y0, x1, y0) <= r ||
+      pointSegmentDist(wx, wy, x1, y0, x1, y1) <= r ||
+      pointSegmentDist(wx, wy, x1, y1, x0, y1) <= r ||
+      pointSegmentDist(wx, wy, x0, y1, x0, y0) <= r
+    );
+  }
+  if (stroke.tool === 'circle') {
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const rx = Math.abs(x1 - x0) / 2, ry = Math.abs(y1 - y0) / 2;
+    if (rx < 1e-6 || ry < 1e-6) return Math.hypot(wx - cx, wy - cy) <= r;
+    const steps = 16;
+    for (let i = 0; i < steps; i++) {
+      const a = (i / steps) * Math.PI * 2;
+      if (Math.hypot(wx - (cx + rx * Math.cos(a)), wy - (cy + ry * Math.sin(a))) <= r) return true;
+    }
+    return false;
+  }
+  return false;
+}
+
+/**
+ * Returns true if `stroke` has at least one defining point inside the
+ * axis-aligned rectangle (rx0,ry0)→(rx1,ry1).  World space.
+ */
+export function strokeIntersectsRect(
+  stroke: Stroke,
+  rx0: number, ry0: number,
+  rx1: number, ry1: number,
+): boolean {
+  const minX = Math.min(rx0, rx1), maxX = Math.max(rx0, rx1);
+  const minY = Math.min(ry0, ry1), maxY = Math.max(ry0, ry1);
+  const inRect = (x: number, y: number) => x >= minX && x <= maxX && y >= minY && y <= maxY;
+
+  if (stroke.points) {
+    const pts = stroke.points;
+    for (let i = 0; i < pts.length; i += 2) {
+      if (inRect(pts[i], pts[i + 1])) return true;
+    }
+    return false;
+  }
+
+  const x0 = stroke.x0!, y0 = stroke.y0!, x1 = stroke.x1!, y1 = stroke.y1!;
+  return inRect(x0, y0) || inRect(x1, y1) || inRect((x0 + x1) / 2, (y0 + y1) / 2);
+}

@@ -1,4 +1,5 @@
 export type Tool = 'pan' | 'pen' | 'eraser' | 'line' | 'rect' | 'circle';
+export type EraserMode = 'stroke' | 'area';
 
 /** All coordinates in WORLD space (invariant to pan/zoom) */
 export interface Stroke {

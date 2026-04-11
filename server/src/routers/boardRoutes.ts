@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
-import { getMyBoards, joinBoardByCode, createBoard, updateBoard, deleteBoard, getBoardById, getYjsState, saveYjsState, setBoardJoinCode, closeYjsRoom } from '../controllers/boardController.js';
+import { getMyBoards, joinBoardByCode, createBoard, updateBoard, deleteBoard, getBoardById, getYjsState, saveYjsState, setBoardJoinCode, closeYjsRoom, clearBoardStrokes, saveCompactYjsState } from '../controllers/boardController.js';
 import { protect } from '../middleware/jwtProtect.js';
 import { set } from 'mongoose';
 
@@ -30,6 +30,14 @@ router.get('/join/:code', joinBoardByCode);
 
 // ── Protected board CRUD ──────────────────────────────────────────────────────
 router.post('/:id/joinCode', protect, setBoardJoinCode);
+// Sub-resource routes must be declared before /:id to avoid shadowing
+router.delete('/:id/strokes', protect, clearBoardStrokes);
+router.put(
+  '/:id/yjs',
+  protect,
+  express.raw({ type: 'application/octet-stream', limit: '50mb' }),
+  saveCompactYjsState,
+);
 router.get('/', protect, getMyBoards);
 router.post('/', protect, createBoard);
 router.get('/:id', protect, getBoardById);

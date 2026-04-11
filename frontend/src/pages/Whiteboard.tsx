@@ -13,12 +13,35 @@ import WhiteboardHUD from '../components/whiteboard/WhiteboardHUD';
 
 // Utils and Types
 import { boardService } from '@/api/services/boardService';
-import type { Tool, Stroke, Viewport } from '../types/whiteboard';
+import type { Tool, EraserMode, Stroke, Viewport } from '../types/whiteboard';
 import {
   genId, screenToWorld, worldToScreen, renderStroke,
+  strokeHitsPoint, strokeIntersectsRect,
   MIN_SCALE, MAX_SCALE
 } from '../utils/whiteboardUtils';
 
+
+// Convert a Yjs stroke map into a plain Stroke object for hit-testing
+function buildStrokeFromY(yStroke: Y.Map<any>): Stroke {
+  const s: Stroke = {
+    id:        yStroke.get('id'),
+    tool:      yStroke.get('tool'),
+    color:     yStroke.get('color') || '#000',
+    width:     yStroke.get('width') || 1,
+    opacity:   yStroke.get('opacity') ?? 1,
+    timestamp: yStroke.get('timestamp') || 0,
+  };
+  const yPoints = yStroke.get('points') as Y.Array<number> | undefined;
+  if (yPoints) {
+    s.points = yPoints.toArray();
+  } else {
+    s.x0 = yStroke.get('x0');
+    s.y0 = yStroke.get('y0');
+    s.x1 = yStroke.get('x1');
+    s.y1 = yStroke.get('y1');
+  }
+  return s;
+}
 
 // Deterministic cursor color from userId
 function userColor(userId: string): string {
@@ -48,10 +71,12 @@ export default function Whiteboard() {
 
   // UI state
   const [tool, setTool] = useState<Tool>('pen');
+  const [eraserMode, setEraserMode] = useState<EraserMode>('stroke');
   const [color, setColor] = useState('#111410');
   const [lineWidth, setLineWidth] = useState(3);
   const [opacity, setOpacity] = useState(1);
   const [userCount, setUserCount] = useState(1);
+  const [isOwner, setIsOwner] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [zoom, setZoom] = useState(1);           
   const [canUndoState, setCanUndoState] = useState(false);
@@ -68,7 +93,12 @@ export default function Whiteboard() {
   // Yjs State
   const ydocRef = useRef<Y.Doc>(new Y.Doc());
   const yStrokesRef = useRef<Y.Map<Y.Map<any>>>(ydocRef.current.getMap('strokes'));
-  const undoManagerRef = useRef<Y.UndoManager>(new Y.UndoManager(yStrokesRef.current));
+  // Unique symbol for this browser session — only transactions tagged with this origin
+  // are tracked by the UndoManager, so each user's undo stack is independent.
+  const localOrigin = useRef(Symbol('local'));
+  const undoManagerRef = useRef<Y.UndoManager>(
+    new Y.UndoManager(yStrokesRef.current, { trackedOrigins: new Set([localOrigin.current]) })
+  );
   
   // Track the ID of the active stroke being drawn
   const activeStrokeId = useRef<string | null>(null);
@@ -89,6 +119,21 @@ export default function Whiteboard() {
   const anonSuffixRef = useRef(Math.random().toString(36).slice(2, 8).toUpperCase());
   const anonIdRef = useRef(`anon_${anonSuffixRef.current.toLowerCase()}`);
 
+  // Eraser refs — kept in sync with state so pointer callbacks avoid stale closures
+  const eraserModeRef = useRef<EraserMode>('stroke');
+  const toolRef       = useRef<Tool>('pen');
+  // Stable copies of isOwner / boardId for use inside effect cleanups and pointer callbacks
+  const isOwnerRef  = useRef(false);
+  const boardIdRef  = useRef<string | undefined>(undefined);
+  // Stroke-erase: IDs collected during drag, committed as one Yjs transaction on pointer-up
+  const pendingErasuresRef = useRef<Set<string>>(new Set());
+  // Area-erase: world-space rectangle being dragged
+  const eraserAreaRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  // IndexedDB provider ref — allows clearing local cache when canvas is fully cleared
+  const indexeddbProviderRef = useRef<import('y-indexeddb').IndexeddbPersistence | null>(null);
+  // Debounce timer for compact-state saves after erase gestures
+  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Pointer tracking
   const isDrawing = useRef(false);
   const isPanning = useRef(false);
@@ -101,6 +146,12 @@ export default function Whiteboard() {
   // Animation frame for render loop
   const rafRef = useRef<number>(0);
   const needsRender = useRef(true);
+
+  // Keep eraser refs in sync so pointer callbacks always see fresh values
+  useEffect(() => { eraserModeRef.current = eraserMode; }, [eraserMode]);
+  useEffect(() => { toolRef.current = tool; }, [tool]);
+  useEffect(() => { isOwnerRef.current = isOwner; }, [isOwner]);
+  useEffect(() => { boardIdRef.current = boardId; }, [boardId]);
 
   // ── Dirty flag helpers ──────────────────────────────────────────────────────
   const markDirty = useCallback(() => { needsRender.current = true; }, []);
@@ -174,7 +225,24 @@ export default function Whiteboard() {
     strokes.sort((a, b) => a.timestamp - b.timestamp);
 
     for (const s of strokes) {
+      if (pendingErasuresRef.current.has(s.id)) continue; // visually hide before commit
       renderStroke(ctx, s, vp);
+    }
+
+    // Area-erase selection rectangle preview
+    if (eraserAreaRef.current) {
+      const { x0, y0, x1, y1 } = eraserAreaRef.current;
+      const a = worldToScreen(x0, y0, vp);
+      const b = worldToScreen(x1, y1, vp);
+      ctx.save();
+      ctx.strokeStyle = '#4A5D3F';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      ctx.globalAlpha = 0.9;
+      ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
+      ctx.fillStyle = 'rgba(74,93,63,0.07)';
+      ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
+      ctx.restore();
     }
 
     // Draw remote cursors on top of strokes
@@ -297,6 +365,7 @@ export default function Whiteboard() {
             const bid = data._id || data.id;
             setBoardId(bid);
             setBoardTitle(data.title || 'Untitled Board');
+            setIsOwner(true);
             // Restore the board's stable join code for the collab button
             if (data.joinCode) setJoinCode(data.joinCode);
           } else {
@@ -323,7 +392,8 @@ export default function Whiteboard() {
 
     // Local IndexedDB Offline Support
     const indexeddbProvider = new IndexeddbPersistence(boardId, ydocRef.current);
-    
+    indexeddbProviderRef.current = indexeddbProvider;
+
     indexeddbProvider.on('synced', () => {
       setStatusMsg('Offline strokes loaded');
       markDirty();
@@ -341,6 +411,7 @@ export default function Whiteboard() {
     return () => {
       yStrokesRef.current.unobserveDeep(observer);
       indexeddbProvider.destroy();
+      indexeddbProviderRef.current = null;
     };
   }, [boardId, markDirty, syncUndoState]);
 
@@ -450,8 +521,27 @@ export default function Whiteboard() {
     if (e.button !== 0) return;
 
     isDrawing.current = true;
-    
+
     const { x: wx, y: wy } = screenToWorld(sx, sy, vp);
+
+    // Eraser: no Yjs stroke; handle hit-detection directly
+    if (effectiveTool === 'eraser') {
+      if (eraserModeRef.current === 'stroke') {
+        const radius = 10 / vpRef.current.scale;
+        yStrokesRef.current.forEach((yStroke, key) => {
+          if (pendingErasuresRef.current.has(key)) return;
+          const s = buildStrokeFromY(yStroke);
+          if (strokeHitsPoint(s, wx, wy, radius)) {
+            pendingErasuresRef.current.add(key);
+            needsRender.current = true;
+          }
+        });
+      } else {
+        eraserAreaRef.current = { x0: wx, y0: wy, x1: wx, y1: wy };
+        needsRender.current = true;
+      }
+      return;
+    }
 
     // Create the stroke in Yjs
     const sid = genId();
@@ -461,12 +551,12 @@ export default function Whiteboard() {
       const yStroke = new Y.Map<any>();
       yStroke.set('id', sid);
       yStroke.set('tool', effectiveTool);
-      yStroke.set('color', effectiveTool === 'eraser' ? '#000000' : color);
+      yStroke.set('color', color);
       yStroke.set('width', lineWidth);
-      yStroke.set('opacity', effectiveTool === 'eraser' ? 1 : opacity);
+      yStroke.set('opacity', opacity);
       yStroke.set('timestamp', Date.now());
 
-      if (effectiveTool === 'pen' || effectiveTool === 'eraser') {
+      if (effectiveTool === 'pen') {
         const yPoints = new Y.Array<number>();
         yPoints.push([wx, wy]);
         yStroke.set('points', yPoints);
@@ -476,7 +566,7 @@ export default function Whiteboard() {
       }
 
       yStrokesRef.current.set(sid, yStroke);
-    });
+    }, localOrigin.current);
 
   }, [tool, color, lineWidth, opacity, getCanvasPos]);
 
@@ -515,22 +605,45 @@ export default function Whiteboard() {
       return;
     }
 
-    if (!isDrawing.current || !activeStrokeId.current) return;
+    if (!isDrawing.current) return;
 
     const { x: wx, y: wy } = screenToWorld(sx, sy, vpRef.current);
-    
+
+    // Eraser has no active Yjs stroke — handle separately
+    if (toolRef.current === 'eraser' && !spaceDown.current) {
+      if (eraserModeRef.current === 'stroke') {
+        const radius = 10 / vpRef.current.scale;
+        yStrokesRef.current.forEach((yStroke, key) => {
+          if (pendingErasuresRef.current.has(key)) return;
+          const s = buildStrokeFromY(yStroke);
+          if (strokeHitsPoint(s, wx, wy, radius)) {
+            pendingErasuresRef.current.add(key);
+            needsRender.current = true;
+          }
+        });
+      } else if (eraserAreaRef.current) {
+        eraserAreaRef.current = { ...eraserAreaRef.current, x1: wx, y1: wy };
+        needsRender.current = true;
+      }
+      return;
+    }
+
+    if (!activeStrokeId.current) return;
+
     const yStroke = yStrokesRef.current.get(activeStrokeId.current);
     if (!yStroke) return;
 
     const currentTool = yStroke.get('tool');
 
-    if (currentTool === 'pen' || currentTool === 'eraser') {
-      const yPoints = yStroke.get('points') as Y.Array<number>;
-      yPoints.push([wx, wy]);
-    } else {
-      yStroke.set('x1', wx);
-      yStroke.set('y1', wy);
-    }
+    ydocRef.current.transact(() => {
+      if (currentTool === 'pen') {
+        const yPoints = yStroke.get('points') as Y.Array<number>;
+        yPoints.push([wx, wy]);
+      } else {
+        yStroke.set('x1', wx);
+        yStroke.set('y1', wy);
+      }
+    }, localOrigin.current);
 
   }, [getCanvasPos, markDirty]);
 
@@ -543,10 +656,44 @@ export default function Whiteboard() {
       return;
     }
 
-    if (!isDrawing.current || !activeStrokeId.current) return;
+    if (!isDrawing.current) return;
     isDrawing.current = false;
-    activeStrokeId.current = null;
 
+    // Commit eraser gesture as a single undo item
+    if (toolRef.current === 'eraser' && !spaceDown.current) {
+      if (eraserModeRef.current === 'stroke') {
+        const ids = Array.from(pendingErasuresRef.current);
+        pendingErasuresRef.current.clear();
+        if (ids.length > 0) {
+          ydocRef.current.transact(() => {
+            ids.forEach(id => yStrokesRef.current.delete(id));
+          }, localOrigin.current);
+          scheduleSave();
+        }
+      } else if (eraserAreaRef.current) {
+        const { x0, y0, x1, y1 } = eraserAreaRef.current;
+        eraserAreaRef.current = null;
+        const toDelete: string[] = [];
+        yStrokesRef.current.forEach((yStroke, key) => {
+          const s = buildStrokeFromY(yStroke);
+          if (strokeIntersectsRect(s, x0, y0, x1, y1)) toDelete.push(key);
+        });
+        if (toDelete.length > 0) {
+          ydocRef.current.transact(() => {
+            toDelete.forEach(id => yStrokesRef.current.delete(id));
+          }, localOrigin.current);
+          scheduleSave();
+        }
+        needsRender.current = true;
+      }
+      // Close the capture window so the next gesture is a separate undo item
+      undoManagerRef.current.stopCapturing();
+      return;
+    }
+
+    activeStrokeId.current = null;
+    // Close the capture window so each stroke is its own undo item
+    undoManagerRef.current.stopCapturing();
   }, []);
 
   // ── Wheel zoom ────────────────────────────────────────────────────────────────
@@ -625,7 +772,10 @@ export default function Whiteboard() {
 
       if (e.key === 'v' || e.key === 'V') setTool('pan');
       if (e.key === 'p' || e.key === 'P') setTool('pen');
-      if (e.key === 'e' || e.key === 'E') setTool('eraser');
+      if (e.key === 'e' || e.key === 'E') {
+        if (tool === 'eraser') setEraserMode(m => m === 'stroke' ? 'area' : 'stroke');
+        else setTool('eraser');
+      }
       if (e.key === 'l' || e.key === 'L') setTool('line');
       if (e.key === 'r' || e.key === 'R') setTool('rect');
       if (e.key === 'o' || e.key === 'O') setTool('circle');
@@ -657,6 +807,20 @@ export default function Whiteboard() {
     };
   }, [undo, redo, fitToScreen, zoomAt, tool]);
 
+  // ── Debounced compact-state save (owner only) ─────────────────────────────────
+  // Schedules a fire-and-forget PUT to replace Board.yjsUpdate with the current
+  // compact Yjs state so erasures survive a full page reload without collab sync.
+  const scheduleSave = useCallback(() => {
+    if (!isOwnerRef.current || !boardIdRef.current) return;
+    if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    saveDebounceRef.current = setTimeout(() => {
+      saveDebounceRef.current = null;
+      const state = Y.encodeStateAsUpdate(ydocRef.current);
+      const buf = state.buffer.slice(state.byteOffset, state.byteOffset + state.byteLength) as ArrayBuffer;
+      boardService.saveCompactYjsState(boardIdRef.current!, buf).catch(console.error);
+    }, 4000);
+  }, []);
+
   // ── Clear canvas ──────────────────────────────────────────────────────────────
   const handleClear = useCallback(() => {
     ydocRef.current.transact(() => {
@@ -665,6 +829,12 @@ export default function Whiteboard() {
         keys.forEach(key => yStrokesRef.current.delete(key));
     });
     markDirty();
+
+    // Persist to the database immediately (owner only)
+    if (isOwnerRef.current && boardIdRef.current) {
+      boardService.clearBoardStrokes(boardIdRef.current).catch(console.error);
+      indexeddbProviderRef.current?.clearData().catch(console.error);
+    }
   }, [markDirty]);
 
   // ── Download PNG ──────────────────────────────────────────────────────────────
@@ -811,9 +981,20 @@ export default function Whiteboard() {
   }, [disconnectCollab]);
 
   // Cleanup WebSocket and reconnect timer on unmount
+  // Also flush any pending compact-state save and do a final best-effort persist.
   useEffect(() => {
     return () => {
       disconnectCollab();
+      // Cancel any pending debounced save and fire immediately instead
+      if (saveDebounceRef.current) {
+        clearTimeout(saveDebounceRef.current);
+        saveDebounceRef.current = null;
+      }
+      if (isOwnerRef.current && boardIdRef.current) {
+        const state = Y.encodeStateAsUpdate(ydocRef.current);
+        const buf = state.buffer.slice(state.byteOffset, state.byteOffset + state.byteLength) as ArrayBuffer;
+        boardService.saveCompactYjsState(boardIdRef.current, buf).catch(() => {/* best-effort */});
+      }
     };
   }, []);
 
@@ -847,12 +1028,13 @@ export default function Whiteboard() {
   }, [joinCode, boardId, connectToCollabServer]);
 
   // ── Cursor helper ─────────────────────────────────────────────────────────────
-  // Solid black arrow cursor matching the navigation-arrow style
   const ARROW_CURSOR = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 15 L5.5 11.5 L8.5 18 L10.5 17 L7.5 10.5 L13 10.5 Z' fill='%23000000'/%3E%3C/svg%3E\") 2 1, auto";
+  // Circle brush cursor for stroke-erase mode
+  const STROKE_ERASER_CURSOR = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='9' stroke='%23000' stroke-width='1.5' fill='none' opacity='0.75'/%3E%3Ccircle cx='12' cy='12' r='1.5' fill='%23000' opacity='0.75'/%3E%3C/svg%3E\") 12 12, crosshair";
 
   function getCursor(t: Tool): string {
     if (t === 'pan') return 'grab';
-    if (t === 'eraser') return 'cell';
+    if (t === 'eraser') return eraserMode === 'stroke' ? STROKE_ERASER_CURSOR : 'crosshair';
     return ARROW_CURSOR;
   }
 
@@ -897,6 +1079,9 @@ export default function Whiteboard() {
       <WhiteboardToolbar
         tool={tool}
         setTool={setTool}
+        eraserMode={eraserMode}
+        setEraserMode={setEraserMode}
+        isOwner={isOwner}
         undo={undo}
         redo={redo}
         canUndoState={canUndoState}
