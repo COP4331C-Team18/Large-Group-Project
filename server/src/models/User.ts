@@ -11,6 +11,7 @@ export interface UserDocument extends Document {
   resetPasswordToken?: string | null;
   resetPasswordExpires?: Date | null;
   provider: "inkboard" | "google";
+  avatarId: string;
   comparePassword(candidate: string): Promise<boolean>;
 }
 
@@ -61,6 +62,7 @@ const userSchema = new Schema<UserDocument>(
       default: "inkboard",
     },
 
+<<<<<<< HEAD
     // for resetting password
     resetPasswordToken: { 
       type: String, 
@@ -70,7 +72,13 @@ const userSchema = new Schema<UserDocument>(
       type: Date, 
       default: null 
     },
-  },
+=======
+    // avatar preset id
+    avatarId: {
+      type: String,
+      default: "default",
+>>>>>>> be3aeabcb42b0b5e25769bcf307416ac47027574
+    },
   { timestamps: true }
 );
 

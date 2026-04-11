@@ -11,8 +11,18 @@ export const boardService = {
     return response.data;
   },
 
+  getBoardById: async (id: string) => {
+    const response = await api.get(`/boards/${id}`);
+    return response.data;
+  },
+
   joinBoardByCode: async (code: string) => {
     const response = await api.get(`/boards/join/${code}`);
+    return response.data;
+  },
+
+  setJoinCode: async (id: string, code: string) => {
+    const response = await api.post(`/boards/${id}/joinCode`, { joinCode: code });
     return response.data;
   },
 

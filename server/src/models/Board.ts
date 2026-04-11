@@ -23,7 +23,7 @@ export interface BoardDocument extends Document {
 	description: string;
 	/** The category of the board (e.g. "Work", "Education", "General"). */
 	category: string;
-	/** 6-digit access code for joining the board. */
+	/** 6-character hex access code for joining the board (e.g. "3F2A1B"). */
 	joinCode: string;
 	/** Reference to the user who created it (even if everyone is effectively an owner). */
 	owner: Types.ObjectId;
@@ -68,7 +68,7 @@ const boardSchema = new Schema<BoardDocument>(
 		joinCode: {
 			type: String,
 			required: false,
-			unique: true,
+			unique: false,
 			index: true,
 			sparse: true,
 		},
