@@ -446,7 +446,7 @@ export function logout(req: Request, res: Response) {
 }
 
 // POST /api/auth/forgot-password
-export async function forgotPassword(req, res) {
+export async function forgotPassword(req: Request, res: Response) {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: "Missing email" });
 
@@ -477,7 +477,7 @@ export async function forgotPassword(req, res) {
 }
 
 // POST /api/auth/reset-password
-export async function resetPassword(req, res) {
+export async function resetPassword(req: Request, res: Response) {
   const { email, token, newPassword } = req.body;
 
   if (!email || !token || !newPassword) {

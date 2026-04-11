@@ -95,7 +95,18 @@ export default function Login() {
               "
             />
           </div>
- 
+
+        {/*Forgot password*/}
+        <button
+          type="button"
+          onClick={() => navigate("/forgot-password")}
+          className="self-start text-xs text-primary font-semibold
+                border-b border-[rgba(74,90,58,0.3)] pb-px
+                hover:border-primary transition-colors duration-150
+                bg-transparent border-x-0 border-t-0 cursor-pointer p-0"
+        >
+          Forgot Password?
+        </button>
 
           <button
             onClick={doLogin}
