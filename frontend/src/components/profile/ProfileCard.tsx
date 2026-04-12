@@ -28,7 +28,7 @@ export default function Profile() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
-    fetch(buildPath("api/auth/current-user"), { credentials: "include" })
+    fetch(buildPath("api/auth/me"), { credentials: "include" })
       .then(res => res.json())
       .then(data => {
         if (!data.authenticated) return;
@@ -44,6 +44,7 @@ export default function Profile() {
     try {
       const res = await fetch(buildPath(`api/users/${userId}/username`), {
         method: "PUT",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ avatarId: id }),
       });
@@ -66,6 +67,7 @@ export default function Profile() {
     try {
       const res = await fetch(buildPath(`api/users/${userId}/username`), {
         method: "PUT",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username }),
       });

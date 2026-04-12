@@ -10,6 +10,7 @@ import { IndexeddbPersistence } from 'y-indexeddb';
 import WhiteboardHeader from '../components/whiteboard/WhiteboardHeader';
 import WhiteboardToolbar from '../components/whiteboard/WhiteboardToolbar';
 import WhiteboardHUD from '../components/whiteboard/WhiteboardHUD';
+import ExportDialog from '../components/whiteboard/ExportDialog';
 
 // Utils and Types
 import { boardService } from '@/api/services/boardService';
@@ -18,6 +19,9 @@ import {
   genId, screenToWorld, worldToScreen, renderStroke,
   MIN_SCALE, MAX_SCALE
 } from '../utils/whiteboardUtils';
+
+// External libraries
+import jsPDF from 'jspdf';
 
 
 // Deterministic cursor color from userId
@@ -57,6 +61,7 @@ export default function Whiteboard() {
   const [canUndoState, setCanUndoState] = useState(false);
   const [canRedoState, setCanRedoState] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
+  const [showExportDialog, setShowExportDialog] = useState(false);
 
   // Canvas refs
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -667,21 +672,138 @@ export default function Whiteboard() {
     markDirty();
   }, [markDirty]);
 
-  // ── Download PNG ──────────────────────────────────────────────────────────────
+  // ── Export Dialog ──────────────────────────────────────────────────────────────
   const handleDownload = useCallback(() => {
+    setShowExportDialog(true);
+  }, []);
+
+  const handleExport = useCallback((format: 'png' | 'jpg' | 'svg' | 'pdf') => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const tmp = document.createElement('canvas');
-    tmp.width = canvas.width;
-    tmp.height = canvas.height;
-    const ctx = tmp.getContext('2d')!;
-    ctx.fillStyle = '#F8F6F0';
-    ctx.fillRect(0, 0, tmp.width, tmp.height);
-    ctx.drawImage(canvas, 0, 0);
-    const a = document.createElement('a');
-    a.download = `${boardTitle}.png`;
-    a.href = tmp.toDataURL('image/png');
-    a.click();
+
+    // Get strokes for SVG export
+    const strokes: Stroke[] = [];
+    yStrokesRef.current.forEach((yStroke: Y.Map<any>) => {
+      const s: any = {
+        id: yStroke.get('id'),
+        tool: yStroke.get('tool'),
+        color: yStroke.get('color'),
+        width: yStroke.get('width'),
+        opacity: yStroke.get('opacity'),
+        timestamp: yStroke.get('timestamp') || 0,
+      };
+
+      const yPoints = yStroke.get('points') as Y.Array<number> | undefined;
+      if (yPoints) {
+        s.points = yPoints.toArray();
+      } else {
+        s.x0 = yStroke.get('x0');
+        s.y0 = yStroke.get('y0');
+        s.x1 = yStroke.get('x1');
+        s.y1 = yStroke.get('y1');
+      }
+      strokes.push(s);
+    });
+    strokes.sort((a, b) => a.timestamp - b.timestamp);
+
+    const filename = `${boardTitle}.${format}`;
+
+    if (format === 'png' || format === 'jpg') {
+      // Create temporary canvas with background
+      const tmp = document.createElement('canvas');
+      tmp.width = canvas.width;
+      tmp.height = canvas.height;
+      const ctx = tmp.getContext('2d')!;
+      ctx.fillStyle = '#F8F6F0';
+      ctx.fillRect(0, 0, tmp.width, tmp.height);
+      ctx.drawImage(canvas, 0, 0);
+
+      const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+      const quality = format === 'jpg' ? 0.9 : undefined;
+
+      const a = document.createElement('a');
+      a.download = filename;
+      a.href = tmp.toDataURL(mimeType, quality);
+      a.click();
+    } else if (format === 'svg') {
+      // Generate SVG from strokes
+      const vp = vpRef.current;
+      let svgContent = `<svg width="${canvas.width}" height="${canvas.height}" xmlns="http://www.w3.org/2000/svg">`;
+      svgContent += `<rect width="100%" height="100%" fill="#F8F6F0"/>`;
+
+      strokes.forEach(stroke => {
+        const opacity = stroke.opacity ?? 1;
+        let pathData = '';
+
+        if (stroke.tool === 'pen' || stroke.tool === 'eraser') {
+          const pts = stroke.points!;
+          if (pts && pts.length >= 2) {
+            const p0 = worldToScreen(pts[0], pts[1], vp);
+            pathData = `M ${p0.x} ${p0.y}`;
+            for (let i = 2; i < pts.length; i += 2) {
+              const p = worldToScreen(pts[i], pts[i + 1], vp);
+              pathData += ` L ${p.x} ${p.y}`;
+            }
+          }
+        } else if (stroke.tool === 'line') {
+          const a = worldToScreen(stroke.x0!, stroke.y0!, vp);
+          const b = worldToScreen(stroke.x1!, stroke.y1!, vp);
+          pathData = `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+        } else if (stroke.tool === 'rect') {
+          const a = worldToScreen(stroke.x0!, stroke.y0!, vp);
+          const b = worldToScreen(stroke.x1!, stroke.y1!, vp);
+          const w = b.x - a.x;
+          const h = b.y - a.y;
+          pathData = `M ${a.x} ${a.y} L ${a.x + w} ${a.y} L ${a.x + w} ${a.y + h} L ${a.x} ${a.y + h} Z`;
+        } else if (stroke.tool === 'circle') {
+          const a = worldToScreen(stroke.x0!, stroke.y0!, vp);
+          const b = worldToScreen(stroke.x1!, stroke.y1!, vp);
+          const rx = Math.abs(b.x - a.x) / 2;
+          const ry = Math.abs(b.y - a.y) / 2;
+          const cx = a.x + (b.x - a.x) / 2;
+          const cy = a.y + (b.y - a.y) / 2;
+          pathData = `M ${cx - rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx + rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx - rx} ${cy}`;
+        }
+
+        if (pathData) {
+          const strokeColor = stroke.tool === 'eraser' ? 'none' : stroke.color;
+          const strokeWidth = stroke.width * vp.scale;
+          svgContent += `<path d="${pathData}" stroke="${strokeColor}" stroke-width="${strokeWidth}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;
+        }
+      });
+
+      svgContent += '</svg>';
+
+      const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.download = filename;
+      a.href = url;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else if (format === 'pdf') {
+      // Generate PDF using jsPDF
+      const pdf = new jsPDF({
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
+      });
+
+      // Create temporary canvas with background
+      const tmp = document.createElement('canvas');
+      tmp.width = canvas.width;
+      tmp.height = canvas.height;
+      const ctx = tmp.getContext('2d')!;
+      ctx.fillStyle = '#F8F6F0';
+      ctx.fillRect(0, 0, tmp.width, tmp.height);
+      ctx.drawImage(canvas, 0, 0);
+
+      const imgData = tmp.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      pdf.save(filename);
+    }
+
+    setShowExportDialog(false);
   }, [boardTitle]);
 
   // ── Copy room code ────────────────────────────────────────────────────────────
@@ -956,6 +1078,12 @@ export default function Whiteboard() {
           <WhiteboardHUD tool={tool} />
         </div>
       </div>
+
+      <ExportDialog
+        isOpen={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+        onExport={handleExport}
+      />
     </div>
   );
 }
