@@ -33,6 +33,7 @@ dependencies:
 
   cupertino_icons: ^1.0.8
   dio: ^5.9.2          # HTTP client for making API requests
+  dio_cookie_manager: ^3.4.0 # Cookie management for Dio (handles session cookies for authentication)
   provider: ^6.1.2     # State management (like Context API)
   google_fonts: ^6.2.1        # Raleway (body) + Lora (headings) — matches web frontend
   shared_preferences: ^2.3.2   # Persist onboarding + login flags across app launches
