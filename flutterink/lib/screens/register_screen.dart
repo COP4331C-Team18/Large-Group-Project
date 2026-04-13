@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutterink/screens/auth_choice_screen.dart';
 import '../api/user_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/dotted_background.dart';
-import 'enter_code_screen.dart';
 import '../utils/routes.dart';
+import '../dialogs/verify_email_dialog.dart';
+import 'dashboard_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -17,6 +19,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _userService = UserService();
 
   bool _isLoading = false;
@@ -27,6 +30,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -47,10 +51,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (!mounted) return;
 
-      // TODO: navigate to verify-email screen, passing the email
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Verification code sent to $email')),
+      final verified = await showGeneralDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: Colors.black.withOpacity(0.5),
+        barrierLabel: 'Dismiss',
+        pageBuilder: (context, _, __) => VerifyEmailDialog(email: email),
       );
+
+      if (verified == true && mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const DashboardScreen()),
+          (route) => false,
+        );
+      }
     } catch (e) {
       setState(() {
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
@@ -71,7 +85,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         leading: BackButton(
           color: AppColors.accent,
           onPressed: () => Navigator.of(context).pushReplacement(
-            slideBackRoute(const EnterCodeScreen()),
+            slideBackRoute(const AuthChoiceScreen()),
           ),
         ),
       ),
@@ -80,9 +94,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 28.0),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(height: 16),
                 _buildHeader(),
                 const SizedBox(height: 36),
                 _buildForm(),
@@ -94,27 +107,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  Widget _buildHeader() {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildHeader(){
+    return Column(
       children: [
-        Text(
-          'Register Now!',
-          style: TextStyle(
-            fontSize: 36,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-            height: 1.2,
-            letterSpacing: -0.5,
+          Image.asset("assets/register-icon.png", height: 225), 
+          SizedBox(height: 12),
+          Text(
+            "LET'S GET STARTED",
+            textAlign: TextAlign.center, 
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontFamily: 'Raleway',
+              fontWeight: FontWeight.w800,
+              letterSpacing: 2.5,
+              color: AppColors.accent,
+            ),
           ),
-        ),
-        SizedBox(height: 12),
-        Text(
-          'It\'s free and takes less than a minute.',
-          style: TextStyle(fontSize: 15, color: AppColors.textMuted),
-        ),
       ],
-    );
+    );    
   }
 
   Widget _buildForm() {
@@ -162,6 +171,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
             },
           ),
 
+          const SizedBox(height: 16),
+
+          _buildField(
+            controller: _confirmPasswordController,
+            label: 'Confirm Password',
+            icon: Icons.lock_outline,
+            obscureText: true,
+            validator: (v) {
+              if (v == null || v.isEmpty) return 'Please confirm your password';
+              if (v != _passwordController.text) return 'Passwords do not match';
+              return null;
+            },
+          ),
+
           const SizedBox(height: 12),
 
           if (_errorMessage != null)
@@ -170,6 +193,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: Text(
                 _errorMessage!,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
+                textAlign: TextAlign.center,
               ),
             ),
 

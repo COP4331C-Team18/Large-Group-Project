@@ -9,7 +9,7 @@ class PrefsService {
   static const _keyOnboarding = 'has_seen_onboarding';
   static const _keyLoggedIn   = 'has_logged_in';
 
-  // ── Onboarding ─────────────────────────────────────────────────────────────
+  // ── Onboarding ──────────────────────────────────────────────────────────
 
   static Future<bool> hasSeenOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
@@ -21,7 +21,7 @@ class PrefsService {
     await prefs.setBool(_keyOnboarding, true);
   }
 
-  // ── Login ───────────────────────────────────────────────────────────────────
+  // ── Login ────────────────────────────────────────────────────────────────
 
   static Future<bool> hasLoggedInBefore() async {
     final prefs = await SharedPreferences.getInstance();
@@ -31,5 +31,11 @@ class PrefsService {
   static Future<void> markLoggedIn() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyLoggedIn, true);
+  }
+
+  // Clears the logged-in flag on logout & redirects to the login screen 
+  static Future<void> clearLoggedIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyLoggedIn);
   }
 }

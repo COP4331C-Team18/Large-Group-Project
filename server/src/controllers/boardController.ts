@@ -113,13 +113,16 @@ export const createBoard = async (req: AuthRequest, res: Response) => {
       return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: 'Unauthorized' });
     }
 
-    const { title = 'Untitled Board', description = '', category = 'General' } = req.body;
+    console.log('createBoard body:', req.body);
+
+    const { title = 'Untitled Board', description = '', category = 'General', tags = [] } = req.body;
 
     // Create and save the new board
     const newBoard = new Board({
       title,
       description,
       category,
+      tags,
       owner: userId
     });
 
@@ -146,7 +149,7 @@ export const updateBoard = async (req: AuthRequest, res: Response) => {
     }
 
     const { id } = req.params;
-    const { title, description, category } = req.body;
+    const { title, description, category, tags} = req.body;
 
     // Find the board and make sure the current user is the owner
     const board = await Board.findOne({ _id: id, owner: userId });
@@ -158,6 +161,7 @@ export const updateBoard = async (req: AuthRequest, res: Response) => {
     if (title !== undefined) board.set('title', title);
     if (description !== undefined) board.set('description', description);
     if (category !== undefined) board.set('category', category);
+    if (tags !== undefined) board.set('tags', tags);
 
     await board.save();
 

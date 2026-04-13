@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../widgets/dotted_background.dart';
 import 'auth_choice_screen.dart';
-import 'enter_code_screen.dart';
 
 class WhyAccountScreen extends StatelessWidget {
   const WhyAccountScreen({super.key});
@@ -27,7 +26,7 @@ class WhyAccountScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildHeader(),
+                      _buildHeader(context),
                       const SizedBox(height: 32),
                       _buildPerks(),
                     ],
@@ -46,22 +45,17 @@ class WhyAccountScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader() {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildHeader(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          'Why be a member?',
-          style: TextStyle(
-            fontSize: 24,
-            fontFamily: 'Inter',
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-            height: 1.2,
-            letterSpacing: -0.5,
-          ),
+          'WHY BE A MEMBER?',
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            color: AppColors.accent,
+          )
         ),
-        SizedBox(height: 12),
+        const SizedBox(height: 12),
       ],
     );
   }
@@ -95,28 +89,11 @@ class WhyAccountScreen extends StatelessWidget {
             MaterialPageRoute(builder: (_) => const AuthChoiceScreen()),
           ),
           child: const Text(
-            'Register / Login',
+            'Continue',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
         ),
 
-        const SizedBox(height: 12),
-
-        OutlinedButton(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.accent,
-            side: const BorderSide(color: AppColors.accent),
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-          onPressed: () => Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const EnterCodeScreen()),
-          ),
-          child: const Text(
-            'Continue without an account',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-          ),
-        ),
       ],
     );
   }
@@ -173,6 +150,7 @@ class _PerkTile extends StatelessWidget {
                     height: 1.4,
                   ),
                 ),
+                const SizedBox(height: 12),
               ],
             ),
           ),
