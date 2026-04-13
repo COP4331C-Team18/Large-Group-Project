@@ -1,3 +1,6 @@
+import { Fragment, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 // Large inkcap mushroom SVG — decorative background element
 function MushroomLarge() {
   return (
@@ -5,18 +8,19 @@ function MushroomLarge() {
       <rect x="168" y="295" width="64" height="225" rx="32" fill="#c8bfae" />
       <ellipse cx="200" cy="225" rx="190" ry="155" fill="#2a2d2e" />
       <ellipse cx="145" cy="148" rx="75" ry="52" fill="#3d4244" opacity="0.45" />
-      <line x1="28"  y1="372" x2="28"  y2="448" stroke="#111410" strokeWidth="11" strokeLinecap="round" />
-      <circle cx="28"  cy="457" r="13" fill="#111410" />
-      <line x1="72"  y1="376" x2="72"  y2="462" stroke="#111410" strokeWidth="9"  strokeLinecap="round" />
-      <circle cx="72"  cy="470" r="10" fill="#111410" />
-      <line x1="118" y1="372" x2="118" y2="455" stroke="#111410" strokeWidth="10" strokeLinecap="round" />
-      <circle cx="118" cy="464" r="11" fill="#111410" />
-      <line x1="282" y1="374" x2="282" y2="450" stroke="#111410" strokeWidth="9"  strokeLinecap="round" />
-      <circle cx="282" cy="458" r="10" fill="#111410" />
-      <line x1="328" y1="370" x2="328" y2="435" stroke="#111410" strokeWidth="8"  strokeLinecap="round" />
-      <circle cx="328" cy="442" r="9"  fill="#111410" />
-      <line x1="372" y1="362" x2="372" y2="412" stroke="#111410" strokeWidth="7"  strokeLinecap="round" />
-      <circle cx="372" cy="419" r="8"  fill="#111410" />
+      {/* Drips: y1 = cap bottom edge at each x (ellipse formula), y2 = circle cy */}
+      <line x1="28"  y1="288" x2="28"  y2="324" stroke="#111410" strokeWidth="11" strokeLinecap="round" />
+      <circle cx="28"  cy="324" r="13" fill="#111410" />
+      <line x1="72"  y1="337" x2="72"  y2="379" stroke="#111410" strokeWidth="9"  strokeLinecap="round" />
+      <circle cx="72"  cy="379" r="10" fill="#111410" />
+      <line x1="118" y1="362" x2="118" y2="406" stroke="#111410" strokeWidth="10" strokeLinecap="round" />
+      <circle cx="118" cy="406" r="11" fill="#111410" />
+      <line x1="282" y1="362" x2="282" y2="408" stroke="#111410" strokeWidth="9"  strokeLinecap="round" />
+      <circle cx="282" cy="408" r="9"  fill="#111410" />
+      <line x1="328" y1="337" x2="328" y2="375" stroke="#111410" strokeWidth="8"  strokeLinecap="round" />
+      <circle cx="328" cy="375" r="9"  fill="#111410" />
+      <line x1="372" y1="288" x2="372" y2="316" stroke="#111410" strokeWidth="7"  strokeLinecap="round" />
+      <circle cx="372" cy="316" r="8"  fill="#111410" />
     </svg>
   );
 }
@@ -27,19 +31,60 @@ function MushroomSmall() {
     <svg viewBox="0 0 240 360" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect x="102" y="202" width="38" height="158" rx="19" fill="#c8bfae" />
       <ellipse cx="121" cy="162" rx="116" ry="98" fill="#2a2d2e" />
-      <line x1="25"  y1="250" x2="25"  y2="300" stroke="#111410" strokeWidth="7" strokeLinecap="round" />
-      <circle cx="25"  cy="307" r="8" fill="#111410" />
-      <line x1="64"  y1="256" x2="64"  y2="312" stroke="#111410" strokeWidth="6" strokeLinecap="round" />
-      <circle cx="64"  cy="318" r="7" fill="#111410" />
-      <line x1="178" y1="254" x2="178" y2="302" stroke="#111410" strokeWidth="6" strokeLinecap="round" />
-      <circle cx="178" cy="308" r="7" fill="#111410" />
-      <line x1="216" y1="246" x2="216" y2="286" stroke="#111410" strokeWidth="5" strokeLinecap="round" />
-      <circle cx="216" cy="291" r="6" fill="#111410" />
+      {/* Drips: y1 = cap bottom edge at each x, y2 = circle cy */}
+      <line x1="25"  y1="214" x2="25"  y2="244" stroke="#111410" strokeWidth="7" strokeLinecap="round" />
+      <circle cx="25"  cy="244" r="8" fill="#111410" />
+      <line x1="64"  y1="244" x2="64"  y2="276" stroke="#111410" strokeWidth="6" strokeLinecap="round" />
+      <circle cx="64"  cy="276" r="7" fill="#111410" />
+      <line x1="178" y1="244" x2="178" y2="278" stroke="#111410" strokeWidth="6" strokeLinecap="round" />
+      <circle cx="178" cy="278" r="7" fill="#111410" />
+      <line x1="216" y1="215" x2="216" y2="243" stroke="#111410" strokeWidth="5" strokeLinecap="round" />
+      <circle cx="216" cy="243" r="6" fill="#111410" />
     </svg>
   );
 }
 
 export default function HeroSection() {
+  const navigate = useNavigate();
+  const [digits, setDigits] = useState<string[]>(Array(6).fill(''));
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const handleChange = (i: number, val: string) => {
+    const clean = val.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    if (!clean) {
+      setDigits(prev => { const n = [...prev]; n[i] = ''; return n; });
+      return;
+    }
+    const ch = clean.slice(-1);
+    setDigits(prev => { const n = [...prev]; n[i] = ch; return n; });
+    if (i < 5) inputRefs.current[i + 1]?.focus();
+  };
+
+  const handleKeyDown = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !digits[i] && i > 0) {
+      e.preventDefault();
+      inputRefs.current[i - 1]?.focus();
+    }
+    if (e.key === 'Enter') handleJoin();
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const raw = e.clipboardData.getData('text').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6);
+    const next = Array(6).fill('');
+    for (let i = 0; i < raw.length; i++) next[i] = raw[i];
+    setDigits(next);
+    inputRefs.current[Math.min(raw.length, 5)]?.focus();
+  };
+
+  const handleJoin = () => {
+    const code = digits.join(''); // digits are already uppercased on input
+    if (code.length < 6) return;
+    navigate(`/join/${code}`);
+  };
+
+  const isComplete = digits.every(d => d !== '');
+
   return (
     <section
       className="
@@ -50,7 +95,6 @@ export default function HeroSection() {
       {/* Bottom green-fade overlay */}
       <div
         className="absolute bottom-0 left-0 right-0 h-48 pointer-events-none z-[1] bg-gradient-to-t from-[#4a5a3a12] to-transparent"
-        
       />
 
       {/* Large inkcap — right side */}
@@ -105,43 +149,55 @@ export default function HeroSection() {
             Have a room code? Join instantly
           </p>
 
-          {/* Digit boxes */}
+          {/* Digit input boxes */}
           <div className="flex items-center gap-[0.4rem]">
-            {['4', '8', '2', null, '9', '1', '7'].map((d, i) =>
-              d === null ? (
-                <span key={i} className="text-primary-content w-3 text-center">·</span>
-              ) : (
-                <div
-                  key={i}
-                  className="
-                    relative w-10 h-[52px] bg-base-100
-                    border border-primary rounded-[3px]
-                    flex items-center justify-center
-                    font-serif text-2xl font-semibold text-base-content
-                  "
-                >
-                  {d}
+            {digits.map((d, i) => (
+              <Fragment key={i}>
+                {i === 3 && (
+                  <span className="text-primary-content w-3 text-center select-none">·</span>
+                )}
+                <div className="relative">
+                  <input
+                    ref={el => { inputRefs.current[i] = el; }}
+                    value={d}
+                    onChange={e => handleChange(i, e.target.value)}
+                    onKeyDown={e => handleKeyDown(i, e)}
+                    onPaste={handlePaste}
+                    onFocus={e => e.target.select()}
+                    maxLength={2}
+                    className="
+                      w-10 h-[52px] bg-base-100
+                      border border-primary rounded-[3px]
+                      text-center caret-transparent
+                      font-serif text-2xl font-semibold text-base-content
+                      focus:outline-none focus:ring-1 focus:ring-primary
+                    "
+                  />
                   {/* Mini drip */}
                   <span
                     className="absolute left-1/2 -translate-x-1/2 w-[3px] h-[6px] bg-primary rounded-b-full opacity-30 top-full"
                   />
                 </div>
-              )
-            )}
+              </Fragment>
+            ))}
           </div>
 
           {/* Enter code button */}
           <button
-            onClick={() => {}}
-            className="
+            onClick={handleJoin}
+            disabled={!isComplete}
+            className={`
               w-full flex items-center justify-center gap-2
               font-sans text-[0.72rem] font-semibold tracking-[0.1em] uppercase
               text-primary-content bg-primary/60
               border border-primary rounded-[3px]
               px-6 py-[0.55rem]
               transition-colors duration-200
-              hover:bg-primary/90 hover:border-primary/40 hover:text-primary-content
-            "
+              ${isComplete
+                ? 'hover:bg-primary/90 hover:border-primary/40 hover:text-primary-content cursor-pointer'
+                : 'opacity-50 cursor-not-allowed'
+              }
+            `}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
