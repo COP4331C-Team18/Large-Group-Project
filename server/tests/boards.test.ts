@@ -43,7 +43,8 @@ describe("BOARDS API", () => {
       const res = await api.post("/api/boards").send({ title: "No Auth Board" });
 
       expect(res.status).toBe(401);
-      expect(res.body.error).toBe("Unauthorized");
+      expect(res.body.authenticated).toBe(false);
+      expect(res.body.message).toMatch(/not authorized/i);
     });
   });
 
@@ -67,7 +68,9 @@ describe("BOARDS API", () => {
       const res = await api.get("/api/boards");
 
       expect(res.status).toBe(401);
-      expect(res.body.error).toBe("Unauthorized");
+      expect(res.body.authenticated).toBe(false);
+      expect(res.body.message).toMatch(/not authorized/i);
+
     });
   });
 
@@ -104,7 +107,9 @@ describe("BOARDS API", () => {
       const res = await api.get("/api/boards/123");
 
       expect(res.status).toBe(401);
-      expect(res.body.error).toBe("Unauthorized");
+      expect(res.body.authenticated).toBe(false);
+      expect(res.body.message).toMatch(/not authorized/i);
+
     });
   });
 
@@ -227,7 +232,9 @@ describe("BOARDS API", () => {
       const res = await api.put("/api/boards/123").send({ title: "No Auth" });
 
       expect(res.status).toBe(401);
-      expect(res.body.error).toBe("Unauthorized");
+      expect(res.body.authenticated).toBe(false);
+      expect(res.body.message).toMatch(/not authorized/i);
+
     });
   });
 
@@ -264,7 +271,9 @@ describe("BOARDS API", () => {
       const res = await api.delete("/api/boards/123");
 
       expect(res.status).toBe(401);
-      expect(res.body.error).toBe("Unauthorized");
+      expect(res.body.authenticated).toBe(false);
+      expect(res.body.message).toMatch(/not authorized/i);
+
     });
   });
 });

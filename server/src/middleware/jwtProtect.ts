@@ -29,7 +29,7 @@ export const protect = asyncHandler(async (req: Request, res: Response, next: Ne
 
             // 3. Admin logic (unchanged)
             if(!decoded.id || !decoded.username) {
-                res.status(401).json({
+                return res.status(401).json({
                     authenticated: false,
                     message: 'Not authorized, invalid token payload'
                 });
@@ -39,7 +39,7 @@ export const protect = asyncHandler(async (req: Request, res: Response, next: Ne
             const user = await User.findById(decoded.id).select('-password');
 
             if (!user) {
-                res.status(401).json({
+                return res.status(401).json({
                     authenticated: false,
                     message: 'User no longer exists'
                 });
@@ -55,12 +55,11 @@ export const protect = asyncHandler(async (req: Request, res: Response, next: Ne
             );
 
             const isProd = process.env.PRODUCTION === "true";
-
             res.cookie("token", newToken, {
-                httpOnly: true,
-                secure: isProd,
-                sameSite: isProd ? "none" : "lax",
-                maxAge: 20 * 60 * 1000, // 20 minutes
+              httpOnly: true,
+              secure: isProd,
+              sameSite: isProd ? "none" : "lax",
+              maxAge: 20 * 60 * 1000,
             });
             
             (req as any).user = user;            
@@ -68,7 +67,7 @@ export const protect = asyncHandler(async (req: Request, res: Response, next: Ne
         } catch (error) {
             // Print the error for debugging but still send a generic message to the client
             console.error(`JWT VERIFICATION ERROR: ${error}`);
-            res.status(401).json({
+            return res.status(401).json({
                 authenticated: false,
                 message: 'Not authorized, token failed'
             });
@@ -76,7 +75,7 @@ export const protect = asyncHandler(async (req: Request, res: Response, next: Ne
     } else {
         // 5. If no cookie is found: 
         // We send the 401 but DO NOT throw an Error to avoid terminal spam.
-        res.status(401).json({ 
+        return res.status(401).json({ 
             authenticated: false,
             message: 'Not authorized, token failed or expired' 
         });
