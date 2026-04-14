@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import Board from '../models/Board'; // Make sure you saved the Board.ts model we updated earlier!
-import { AuthRequest } from '../middleware/authMiddleware';
+import { AuthRequest } from '../middleware/jwtProtect';
 import { HTTPStatusCodes } from '../utils/statusCodes';
 
 // GET /api/boards
