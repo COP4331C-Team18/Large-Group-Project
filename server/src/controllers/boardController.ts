@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import Board from '../models/Board.js'; // Make sure you saved the Board.ts model we updated earlier!
-import { AuthRequest } from '../middleware/authMiddleware.js';
-import { HTTPStatusCodes } from '../utils/statusCodes.js';
+import Board from '../models/Board'; // Make sure you saved the Board.ts model we updated earlier!
+import { AuthRequest } from '../middleware/jwtProtect';
+import { HTTPStatusCodes } from '../utils/statusCodes';
 
 // GET /api/boards
 // PROTECTED: Fetches only the boards owned by the logged-in user

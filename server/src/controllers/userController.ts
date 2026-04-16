@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import User from "../models/User.js";
+import User from "../models/User";
+import Board from "../models/Board";
 import bcrypt from 'bcryptjs';
 
 export const getAllUsers = async (req: Request, res: Response) => {
@@ -51,7 +52,7 @@ export const updateUser = async (req: Request, res: Response) => {
         const updatedUser = await User.findByIdAndUpdate(
             id,
             { ...(username && { username }), ...(avatarId && { avatarId }) },
-            { new: true }
+            { returnDocument: "after" } // removing the deprecated 'new' option and using 'returnDocument' instead
         ).select("-password");
 
         if (!updatedUser) {
@@ -101,6 +102,8 @@ export const deleteUser = async (req: Request, res: Response) => {
             return res.status(404).json({ message: "User not found" });
         }
 
+        // Delete all boards owned by the user too while deleting the user
+        await Board.deleteMany({ owner: req.params.id });
         res.status(200).json({ message: "User deleted" });
 
     } catch (error) {

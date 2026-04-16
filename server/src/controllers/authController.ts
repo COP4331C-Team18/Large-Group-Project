@@ -1,12 +1,12 @@
 import { OAuth2Client } from "google-auth-library";
-import User from "../models/User.js";
-import { signAccessToken } from "../utils/jwtUtils.js";
-import { HTTPStatusCodes } from "../utils/statusCodes.js";
+import User from "../models/User";
+import { signAccessToken } from "../utils/jwtUtils";
+import { HTTPStatusCodes } from "../utils/statusCodes";
 import { Request, Response } from "express";
 import * as postmark from "postmark";
 
 const MIN_PASSWORD_LENGTH = 10;
-const JWT_EXPIRATION = "1h";
+const JWT_EXPIRATION = "20m";
 
 // Generate 6-digit verification code
 function generateVerificationCode() {
@@ -108,7 +108,7 @@ export async function login(req: Request, res: Response) {
       httpOnly: true,
       secure: isProd,                 // only true in production
       sameSite: isProd ? "none" : "lax",   // lax for localhost
-      maxAge: 60 * 60 * 1000
+      maxAge: 20 * 60 * 1000  // 20 minutes
     });
 
     return res.status(HTTPStatusCodes.OK).json({
@@ -268,7 +268,7 @@ export async function verifyEmail(req: Request, res: Response) {
       httpOnly: true,
       secure: isProd,                 // only true in production
       sameSite: isProd ? "none" : "lax",   // lax for localhost
-      maxAge: 60 * 60 * 1000
+      maxAge: 20 * 60 * 1000 // 20 minutes
     });
 
     return res.status(HTTPStatusCodes.OK).json({
@@ -348,7 +348,7 @@ export async function googleOAuth(req: Request, res: Response) {
       httpOnly: true,
       secure: isProd,                 // only true in production
       sameSite: isProd ? "none" : "lax",   // lax for localhost
-      maxAge: 60 * 60 * 1000
+      maxAge: 20 * 60 * 1000 // 20 minutes
     });
 
     return res.status(HTTPStatusCodes.OK).json({
