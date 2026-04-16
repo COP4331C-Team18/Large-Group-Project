@@ -3,6 +3,7 @@ import '../api/user_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/dotted_background.dart';
 import 'enter_code_screen.dart';
+import 'verify_email_screen.dart';
 import '../utils/routes.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -47,9 +48,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (!mounted) return;
 
-      // TODO: navigate to verify-email screen, passing the email
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Verification code sent to $email')),
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => VerifyEmailScreen(email: email)),
       );
     } catch (e) {
       setState(() {

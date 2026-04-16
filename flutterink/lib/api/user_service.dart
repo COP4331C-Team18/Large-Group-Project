@@ -52,10 +52,14 @@ class UserService {
   }
 
   // POST /api/auth/verify-email
-  // Body: { token }
-  Future<void> verifyEmail(String token) async {
+  // Body: { email, verificationCode }
+  Future<User> verifyEmail(String email, String verificationCode) async {
     try {
-      await _api.post('/auth/verify-email', data: {'token': token});
+      final response = await _api.post('/auth/verify-email', data: {
+        'email': email,
+        'verificationCode': verificationCode,
+      });
+      return User.fromJson(response.data['user'] as Map<String, dynamic>);
     } on DioException catch (e) {
       final message = e.response?.data['error'] ?? 'Email verification failed';
       throw Exception(message);

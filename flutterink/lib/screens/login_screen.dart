@@ -5,6 +5,7 @@ import '../services/prefs_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/dotted_background.dart';
 import 'enter_code_screen.dart';
+import 'home_screen.dart';
 import '../utils/routes.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -44,14 +45,12 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text,
       );
 
-      print(user.toJson()); // For debugging purposes
-
       await PrefsService.markLoggedIn();
 
       if (!mounted) return;
 
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const EnterCodeScreen()),
+        MaterialPageRoute(builder: (_) => HomeScreen(user: user)),
         (_) => false,
       );
     } catch (e) {
