@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'api/api.dart';
 import 'services/prefs_service.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/why_account_screen.dart';
 import 'screens/enter_code_screen.dart';
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Api.initialize();
   runApp(const MyApp());
 }
 

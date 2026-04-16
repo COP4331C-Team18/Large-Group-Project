@@ -1,6 +1,12 @@
+import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
+import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:path_provider/path_provider.dart';
+
 
 class Api {
+
+  static Api? _instance;
   final Dio _dio;
 
   // Static constant for the Base URL
@@ -10,32 +16,50 @@ class Api {
     defaultValue: 'http://localhost:5001/api',
   );
 
-  Api()
-      : _dio = Dio(
-          BaseOptions(
-            baseUrl: _baseUrl,
-            connectTimeout: const Duration(seconds: 5),
-            receiveTimeout: const Duration(seconds: 3),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            extra: {'withCredentials': true},
+  Api._(this._dio);
 
-            validateStatus: (status) => status != null && status >= 200 && status < 300,
-          ),
-        ) { 
-    _initializeInterceptors();
+  static Api get instance {
+    if (_instance == null) {
+      throw Exception('Api instance not initialized. Call Api() constructor first.');
+    }
+    return _instance!;
+  }
+
+  static Future<void> initialize() async {
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: _baseUrl,
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 3),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        extra: {'withCredentials': true},
+        validateStatus: (status) => status != null && status >= 200 && status < 300,
+      ),
+    );
+
+    // Initialize cookie management
+    final appDocDir = await getApplicationDocumentsDirectory();
+    final cookieJar = PersistCookieJar(storage: FileStorage(appDocDir.path));
+
+    dio.interceptors.add(CookieManager(cookieJar));
+
+    _instance = Api._(dio);
+    _instance!._initializeInterceptors();
   }
 
   void _initializeInterceptors() {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
+
           print('--> ${options.method} ${options.path}');
           return handler.next(options);
         },
         onResponse: (response, handler) {
+
           print('<-- ${response.statusCode} ${response.requestOptions.path}');
           return handler.next(response);
         },

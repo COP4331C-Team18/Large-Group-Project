@@ -3,7 +3,7 @@ import './api.dart';
 import '../models/user.dart';
 
 class UserService {
-  final Api _api = Api();
+  final Api _api = Api.instance;
 
   // POST /api/auth/login
   // Body: { login, password }
@@ -48,6 +48,44 @@ class UserService {
       return null;
     } on DioException catch (_) {
       return null;
+    }
+  }
+
+  // POST /api/auth/verify-email
+  // Body: { email, verificationCode }
+  Future<User> verifyEmail(String email, String verificationCode) async {
+    try {
+      final response = await _api.post('/auth/verify-email', data: {
+        'email': email,
+        'verificationCode': verificationCode,
+      });
+      return User.fromJson(response.data['user'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      final message = e.response?.data['error'] ?? 'Email verification failed';
+      throw Exception(message);
+    }
+  }
+
+  // POST /api/auth/resend-verification
+  // Body: { email }
+  Future<void> resendVerification(String email) async {
+    try {
+      await _api.post('/auth/resend-verification', data: {'email': email});
+    } on DioException catch (e) {
+      final message = e.response?.data['error'] ?? 'Failed to resend verification';
+      throw Exception(message);
+    }
+  }
+
+  // POST /api/auth/google
+  // Body: { idToken }
+  Future<User> googleAuth(String idToken) async {
+    try {
+      final response = await _api.post('/auth/google', data: {'idToken': idToken});
+      return User.fromJson(response.data['user'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      final message = e.response?.data['error'] ?? 'Google sign-in failed';
+      throw Exception(message);
     }
   }
 
