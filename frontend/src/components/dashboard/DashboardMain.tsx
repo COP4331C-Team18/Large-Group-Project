@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import InkBoardCard from "./BoardCard";
 import RoomSection from "./RoomComponent";
 import { boardService } from "@/api/services/boardService";
+import { useBoardPreview } from "@/hooks/useBoardPreview";
 import { useNavigate } from "react-router-dom";
 
 const DashboardMain = () => {
@@ -11,6 +12,9 @@ const DashboardMain = () => {
   const [boards, setBoards] = useState<any[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({ title: "", description: "" });
+  const modalCanvasRef = useRef<HTMLCanvasElement>(null) as React.RefObject<HTMLCanvasElement>;
+
+  useBoardPreview(selectedId ?? undefined, modalCanvasRef, 24);
 
   const fetchBoards = async () => {
     try {
@@ -73,19 +77,19 @@ const DashboardMain = () => {
   return (
     <div className="h-full flex-1 min-w-0 relative">
       <main
-          className="w-full h-full 
+          className="w-full h-full
           rounded-3xl p-8 flex flex-col overflow-hidden
           shadow-md border border-neutral
           bg-base-200 gap-2"
         >
                 <RoomSection />
-                
+
                 <div className="divider divider-neutral divider-start text-base-content text-2xl font-serif">Boards</div>
-    
+
                       <div className="flex-wrap gap-9 pt-1 grid grid-cols-5 aspect-video overflow-y-auto custom-scrollbar">
                         {boards && boards.map((board) => (
-                          <InkBoardCard 
-                            key={board.id || board._id} 
+                          <InkBoardCard
+                            key={board.id || board._id}
                             id={board.id || board._id}
                             title={board.title || board.name}
                             editedAt={board.editedAt || board.updatedAt || new Date().toLocaleDateString()}
@@ -93,7 +97,7 @@ const DashboardMain = () => {
                             onClick={() => {
                               setSelectedId(String(board.id || board._id));
                               setIsEditing(false);
-                            }} 
+                            }}
                           />
                         ))}
                       </div>
@@ -117,8 +121,14 @@ const DashboardMain = () => {
                 layoutId={selectedId}
                 className="relative w-full max-w-3xl overflow-hidden rounded-[14px] bg-base-100 p-8 shadow-2xl border border-neutral flex flex-col gap-6 font-serif z-10"
               >
-                <div className="aspect-video w-full rounded-lg bg-base-300 flex items-center justify-center text-base-content/50">
-                  PREVIEW HERE
+                <div className="aspect-video w-full rounded-lg bg-[#F8F6F0] overflow-hidden">
+                  <canvas
+                    ref={modalCanvasRef}
+                    className="w-full h-full"
+                    width={768}
+                    height={432}
+                    style={{ background: '#F8F6F0' }}
+                  />
                 </div>
 
                 {isEditing ? (
