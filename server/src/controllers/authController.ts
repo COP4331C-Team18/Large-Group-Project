@@ -4,6 +4,7 @@ import { signAccessToken } from "../utils/jwtUtils";
 import { HTTPStatusCodes } from "../utils/statusCodes";
 import { Request, Response } from "express";
 import * as postmark from "postmark";
+import jwt from 'jsonwebtoken';
 
 const MIN_PASSWORD_LENGTH = 10;
 const JWT_EXPIRATION = "20m";
@@ -442,4 +443,82 @@ export function logout(req: Request, res: Response) {
     path: "/",
   });
   return res.status(200).json({ message: "Logged out" });
+}
+
+// POST /api/auth/forgot-password
+export async function forgotPassword(req: Request, res: Response) {
+  const { email } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(200).json({ message: "If that email exists, a reset link has been sent." });
+    }
+
+    // Generate token using the current password hash as part of the secret
+    const secret = (process.env.JWT_SECRET as string) + user.password;
+    const token = jwt.sign({ id: user._id }, secret, { expiresIn: '15m' });
+
+    // HARDCODED LINK for InkBoard
+    // For local testing, change frontendURL to localhost url 
+    // Ex: const frontendUrl = "http://localhost:5173"; 
+    const frontendUrl = "https://inkboard.xyz"; 
+    const resetLink = `${frontendUrl}/forgetpassword/${user._id}/${token}`;
+
+    const apiKey = process.env.POSTMARK_API_KEY;
+    const fromEmail = process.env.POSTMARK_FROM_EMAIL;
+
+    if (!apiKey || !fromEmail) {
+      return res.status(500).json({ error: "Server configuration error" });
+    }
+
+    const client = new postmark.ServerClient(apiKey);
+
+    // Email content
+    await client.sendEmail({
+      From: `InkBoard <${fromEmail}>`,
+      To: user.email,
+      Subject: "Reset your InkBoard password",
+      HtmlBody: `
+        <div style="font-family: sans-serif; padding: 20px; color: #111410;">
+          <h2>InkBoard Password Reset</h2>
+          <p>Click the button below to set a new password. This link will expire in 15 minutes.</p>
+          <a href="${resetLink}" style="background: #4a5a3a; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">Reset Password</a>
+          <p style="margin-top: 20px; font-size: 0.8rem; color: #9e8268;">If you didn't request this, you can ignore this email.</p>
+        </div>
+      `,
+    });
+    return res.status(200).json({ message: "Email sent successfully." });
+  } catch (err: any) {
+    return res.status(500).json({ error: "Failed to send email." });
+  }
+}
+
+// POST /api/auth/reset-password
+export async function resetPassword(req: Request, res: Response) {
+  const { id, token, password, confirmPassword } = req.body;
+
+  if (password !== confirmPassword) {
+    return res.status(400).json({ error: "Passwords do not match" });
+  }
+
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return res.status(400).json({ error: "Password too short" });
+  }
+
+  try {
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // Reconstruct the secret used to sign the token
+    const secret = (process.env.JWT_SECRET as string) + user.password;
+    jwt.verify(token, secret);
+
+    user.password = password;
+    await user.save();
+
+    return res.status(200).json({ message: "Password updated successfully" });
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid or expired reset link" });
+  }
 }
