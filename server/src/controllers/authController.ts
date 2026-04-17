@@ -457,7 +457,6 @@ export async function forgotPassword(req: Request, res: Response) {
     if (!user) {
       return res.status(200).json({ message: "If that email exists, a reset link has been sent." });
     }
-
     // generate a secure random token
     const resetToken = crypto.randomBytes(32).toString("hex");
     
