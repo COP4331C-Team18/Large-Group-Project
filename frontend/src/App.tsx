@@ -20,9 +20,6 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/reset-password" element={<ForgetPassword />} />
 
-        {/* Public: sends a unqiue link for password reset */}
-        <Route path="/forgetpassword/:id/:token" element={<ForgetPassword />} />
-
         {/* Public: resolves a join code and redirects to /board/:id?collab=CODE */}
         <Route path="/join/:code" element={<JoinBoard />} />
 
