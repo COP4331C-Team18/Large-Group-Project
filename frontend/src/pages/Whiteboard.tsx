@@ -80,6 +80,8 @@ export default function Whiteboard() {
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const editingTextIdRef = useRef<string | null>(null);
   const selectedTextIdRef = useRef<string | null>(null);
+  const skipNextTextStyleWriteRef = useRef(false);
+  const skipNextTextFontWriteRef = useRef(false);
   
   // Track the ID of the active stroke being drawn
   const activeStrokeId = useRef<string | null>(null);
@@ -519,6 +521,8 @@ export default function Whiteboard() {
 
   useEffect(() => {
     if (!selectedTextId) return;
+    skipNextTextStyleWriteRef.current = true;
+    skipNextTextFontWriteRef.current = true;
     const yEl = yTextsRef.current.get(selectedTextId);
     if (!yEl) return;
     const boxColor = (yEl.get('color') as string) || '#111410';
@@ -531,6 +535,10 @@ export default function Whiteboard() {
 
   useEffect(() => {
     if (!selectedTextId || editingTextIdRef.current === selectedTextId) return;
+    if (skipNextTextStyleWriteRef.current) {
+      skipNextTextStyleWriteRef.current = false;
+      return;
+    }
     const yEl = yTextsRef.current.get(selectedTextId);
     if (!yEl) return;
     const nextColor = color;
@@ -545,6 +553,10 @@ export default function Whiteboard() {
 
   useEffect(() => {
     if (!selectedTextId || editingTextIdRef.current === selectedTextId) return;
+    if (skipNextTextFontWriteRef.current) {
+      skipNextTextFontWriteRef.current = false;
+      return;
+    }
     const yEl = yTextsRef.current.get(selectedTextId);
     if (!yEl) return;
     if ((yEl.get('fontSize') as number) === fontSize) return;
