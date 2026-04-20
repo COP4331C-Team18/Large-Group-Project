@@ -46,7 +46,7 @@ export const boardService = {
 
   // keepalive: true ensures the request completes even during page reload/close
   saveYjsStateOnUnload: (id: string, update: Uint8Array) => {
-    const buffer = update.buffer.slice(update.byteOffset, update.byteOffset + update.byteLength);
+    const buffer = update.buffer.slice(update.byteOffset, update.byteOffset + update.byteLength) as ArrayBuffer;
     const baseURL = import.meta.env.VITE_API_BASE_URL || '';
     fetch(`${baseURL}/boards/${id}/yjs`, {
       method: 'PUT',

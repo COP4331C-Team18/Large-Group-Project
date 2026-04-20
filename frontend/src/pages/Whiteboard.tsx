@@ -144,25 +144,12 @@ export default function Whiteboard() {
       if (bgCanvas) {
         const bgCtx = bgCanvas.getContext('2d');
         if (bgCtx) {
-          const { bg, dotColor } = getThemeColors();
+          const { bg } = getThemeColors();
           const W = bgCanvas.width;
           const H = bgCanvas.height;
           bgCtx.clearRect(0, 0, W, H);
           bgCtx.fillStyle = bg;
           bgCtx.fillRect(0, 0, W, H);
-
-          // Fixed screen-space grid — not affected by pan or zoom
-          const DOT_SPACING = 28;
-          bgCtx.globalAlpha = 0.3;
-          bgCtx.fillStyle = dotColor;
-          for (let gx = DOT_SPACING / 2; gx < W; gx += DOT_SPACING) {
-            for (let gy = DOT_SPACING / 2; gy < H; gy += DOT_SPACING) {
-              bgCtx.beginPath();
-              bgCtx.arc(gx, gy, 1.5, 0, Math.PI * 2);
-              bgCtx.fill();
-            }
-          }
-          bgCtx.globalAlpha = 1;
         }
       }
     }
