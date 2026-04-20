@@ -11,6 +11,7 @@ const WhiteboardHUD: React.FC<WhiteboardHUDProps> = ({ tool }) => {
       <div className="px-3 py-1.5 rounded-full backdrop-blur-sm text-[10px] font-bold uppercase tracking-widest bg-primary/80 text-primary-content">
         {tool === 'pan'    && '✦ Pan  —  drag to move'}
         {tool === 'pen'    && '✦ Pen  —  freehand draw'}
+        {tool === 'text'   && '✦ Text  —  click to create, double‑click to edit'}
         {tool === 'eraser' && '✦ Eraser  —  drag to erase'}
         {tool === 'line'   && '✦ Line  —  click & drag'}
         {tool === 'rect'   && '✦ Rectangle  —  click & drag'}

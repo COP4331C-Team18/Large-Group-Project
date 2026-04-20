@@ -4,21 +4,34 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import * as Y from 'yjs';
-import { IndexeddbPersistence } from 'y-indexeddb';
 
 // Internal Components
 import WhiteboardHeader from '../components/whiteboard/WhiteboardHeader';
 import WhiteboardToolbar from '../components/whiteboard/WhiteboardToolbar';
 import WhiteboardHUD from '../components/whiteboard/WhiteboardHUD';
+import TextEditorOverlay from '../components/whiteboard/TextEditorOverlay';
+import ExportDialog from '../components/whiteboard/ExportDialog';
 
 // Utils and Types
 import { boardService } from '@/api/services/boardService';
+import { THEMES } from '@/config/theme';
 import type { Tool, Stroke, Viewport } from '../types/whiteboard';
 import {
   genId, screenToWorld, worldToScreen, renderStroke,
-  MIN_SCALE, MAX_SCALE
+  MIN_SCALE, MAX_SCALE, SNAPSHOT_DEBOUNCE_MS, parseFramedYjsUpdates
 } from '../utils/whiteboardUtils';
 
+// External libraries
+import jsPDF from 'jspdf';
+
+function getThemeColors() {
+  const themeId = document.documentElement.getAttribute('data-theme') ?? 'inkboard';
+  const theme = THEMES.find(t => t.id === themeId);
+  return {
+    bg: theme?.swatch.base ?? '#F8F6F0',
+    dotColor: theme?.swatch.content ?? '#111410',
+  };
+}
 
 // Deterministic cursor color from userId
 function userColor(userId: string): string {
@@ -31,6 +44,7 @@ function userColor(userId: string): string {
 }
 
 type RemoteCursor = { x: number; y: number; username: string; lastSeen: number };
+
 
 export default function Whiteboard() {
   const { id } = useParams<{ id: string }>();
@@ -57,9 +71,15 @@ export default function Whiteboard() {
   const [canUndoState, setCanUndoState] = useState(false);
   const [canRedoState, setCanRedoState] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
+  const [pendingTextCreate, setPendingTextCreate] = useState<{ x: number; y: number } | null>(null);
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
+  const [fontSize, setFontSize] = useState(18);
+  const [showExportDialog, setShowExportDialog] = useState(false);
 
-  // Canvas refs
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Canvas refs — 3 layers stacked
+  const bgCanvasRef = useRef<HTMLCanvasElement>(null);     // layer 1: background + dots
+  const canvasRef = useRef<HTMLCanvasElement>(null);       // layer 2: strokes (receives pointer events)
+  const cursorCanvasRef = useRef<HTMLCanvasElement>(null); // layer 3: remote cursors
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Viewport (pan + zoom)
@@ -68,7 +88,16 @@ export default function Whiteboard() {
   // Yjs State
   const ydocRef = useRef<Y.Doc>(new Y.Doc());
   const yStrokesRef = useRef<Y.Map<Y.Map<any>>>(ydocRef.current.getMap('strokes'));
-  const undoManagerRef = useRef<Y.UndoManager>(new Y.UndoManager(yStrokesRef.current));
+  const yTextsRef = useRef<Y.Map<Y.Map<any>>>(ydocRef.current.getMap('texts'));
+  const undoManagerRef = useRef<Y.UndoManager>(new Y.UndoManager([
+    yStrokesRef.current,
+    yTextsRef.current,
+  ]));
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const editingTextIdRef = useRef<string | null>(null);
+  const selectedTextIdRef = useRef<string | null>(null);
+  const skipNextTextStyleWriteRef = useRef(false);
+  const skipNextTextFontWriteRef = useRef(false);
   
   // Track the ID of the active stroke being drawn
   const activeStrokeId = useRef<string | null>(null);
@@ -94,6 +123,16 @@ export default function Whiteboard() {
   const isPanning = useRef(false);
   const panStart = useRef<{ px: number; py: number; vpx: number; vpy: number } | null>(null);
   const spaceDown = useRef(false);
+  const activeTextTransform = useRef<{
+    id: string;
+    mode: 'move' | 'resize';
+    startWx: number;
+    startWy: number;
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+  } | null>(null);
 
   // Touch (pinch-zoom)
   const lastTouches = useRef<React.Touch[] | null>(null);
@@ -101,9 +140,11 @@ export default function Whiteboard() {
   // Animation frame for render loop
   const rafRef = useRef<number>(0);
   const needsRender = useRef(true);
+  const bgNeedsRender = useRef(true); // only set on resize or theme change
 
   // ── Dirty flag helpers ──────────────────────────────────────────────────────
   const markDirty = useCallback(() => { needsRender.current = true; }, []);
+  const markBgDirty = useCallback(() => { bgNeedsRender.current = true; needsRender.current = true; }, []);
 
   // ── Undo/redo state sync ─────────────────────────────────────────────────────
   const syncUndoState = useCallback(() => {
@@ -111,123 +152,382 @@ export default function Whiteboard() {
     setCanRedoState(undoManagerRef.current.redoStack.length > 0);
   }, []);
 
+  
+  // Create a new text element in Yjs and return its id
+  function createTextElementAt(worldX: number, worldY: number) {
+    const id = genId();
+    ydocRef.current.transact(() => {
+      const yEl = new Y.Map<any>();
+      yEl.set('id', id);
+      yEl.set('type', 'text');
+      yEl.set('x', worldX);
+      yEl.set('y', worldY);
+      yEl.set('width', 200);
+      yEl.set('height', 80);
+      yEl.set('fontSize', 18);
+      yEl.set('color', '#111410');
+      yEl.set('opacity', 1);
+      const ytext = new Y.Text();
+      yEl.set('content', ytext);
+      yTextsRef.current.set(id, yEl);
+    });
+    markDirty();
+    return id;
+  }
+
+  const createPendingTextBox = useCallback(() => {
+    if (!pendingTextCreate) return;
+    const tid = createTextElementAt(pendingTextCreate.x, pendingTextCreate.y);
+    setSelectedTextId(tid);
+    setEditingTextId(tid);
+    setPendingTextCreate(null);
+  }, [pendingTextCreate]);
+
+  function cssHexToRgb(hex: string): { r: number; g: number; b: number } {
+    const normalized = hex.replace('#', '').trim();
+    const expanded = normalized.length === 3
+      ? normalized.split('').map((ch) => ch + ch).join('')
+      : normalized;
+    const padded = expanded.padEnd(6, '0').slice(0, 6);
+    const int = Number.parseInt(padded, 16);
+    return {
+      r: (int >> 16) & 255,
+      g: (int >> 8) & 255,
+      b: int & 255,
+    };
+  }
+
+  function rgbaFromHex(hex: string, alpha: number): string {
+    const { r, g, b } = cssHexToRgb(hex);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  function getReadableTextColor(hex: string): string {
+    const { r, g, b } = cssHexToRgb(hex);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.62 ? '#111410' : '#FFFFFF';
+  }
+
+  function getTextHitRegion(worldX: number, worldY: number): { id: string; region: 'delete' | 'resize' | 'body' } | null {
+    const scale = Math.max(0.1, vpRef.current.scale);
+    const pad = 2 / scale;
+    const ctrlSize = 18 / scale;
+    const ctrlGap = 3 / scale;
+    const resizeSize = 18 / scale;
+
+    const keys = Array.from(yTextsRef.current.keys()).reverse();
+    for (const k of keys) {
+      const el = yTextsRef.current.get(k);
+      if (!el) continue;
+
+      const ex = el.get('x') as number;
+      const ey = el.get('y') as number;
+      const ew = el.get('width') as number;
+      const eh = el.get('height') as number;
+
+      const ctrlY0 = ey - ctrlSize - ctrlGap;
+      const ctrlY1 = ey - ctrlGap;
+      const deleteX1 = ex + ew - pad;
+      const deleteX0 = deleteX1 - ctrlSize;
+
+      const inDelete =
+        worldX >= deleteX0 && worldX <= deleteX1 &&
+        worldY >= ctrlY0 && worldY <= ctrlY1;
+      if (inDelete) return { id: k, region: 'delete' };
+
+      const inBody = worldX >= ex && worldX <= ex + ew && worldY >= ey && worldY <= ey + eh;
+      if (!inBody) continue;
+
+      const inResize =
+        worldX >= ex + ew - resizeSize && worldX <= ex + ew &&
+        worldY >= ey + eh - resizeSize && worldY <= ey + eh;
+      if (inResize) return { id: k, region: 'resize' };
+
+      return { id: k, region: 'body' };
+    }
+
+    return null;
+  }
+
+  function hitTestTextAt(worldX: number, worldY: number): { id: string; mode: 'move' | 'resize' } | null {
+    const hit = getTextHitRegion(worldX, worldY);
+    if (!hit) return null;
+    if (hit.region === 'delete') return null;
+    return { id: hit.id, mode: hit.region === 'resize' ? 'resize' : 'move' };
+  }
+
+  function hitTestTextControlAt(worldX: number, worldY: number): { id: string; action: 'body' | 'resize' | 'delete' } | null {
+    const hit = getTextHitRegion(worldX, worldY);
+    if (!hit) return null;
+    return { id: hit.id, action: hit.region };
+  }
+
+  function hitTestTextBody(worldX: number, worldY: number): { id: string } | null {
+    const hit = getTextHitRegion(worldX, worldY);
+    if (!hit || hit.region === 'delete') return null;
+    return { id: hit.id };
+  }
+
+  function hitTestTextControlHover(worldX: number, worldY: number): 'delete' | 'resize' | null {
+    const hit = getTextHitRegion(worldX, worldY);
+    if (!hit) return null;
+    if (hit.region === 'delete' || hit.region === 'resize') return hit.region;
+    return null;
+  }
+
   // ── Render loop ─────────────────────────────────────────────────────────────
   const render = useCallback(() => {
     rafRef.current = requestAnimationFrame(render);
     if (!needsRender.current) return;
     needsRender.current = false;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
     const vp = vpRef.current;
-    const W = canvas.width;
-    const H = canvas.height;
 
-    // Background + grid
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#F8F6F0';
-    ctx.fillRect(0, 0, W, H);
+    // ── Layer 1: fixed background + dot grid (redraws only on resize/theme) ──
+    if (bgNeedsRender.current) {
+      bgNeedsRender.current = false;
+      const bgCanvas = bgCanvasRef.current;
+      if (bgCanvas) {
+        const bgCtx = bgCanvas.getContext('2d');
+        if (bgCtx) {
+          const { bg, dotColor } = getThemeColors();
+          const W = bgCanvas.width;
+          const H = bgCanvas.height;
+          bgCtx.clearRect(0, 0, W, H);
+          bgCtx.fillStyle = bg;
+          bgCtx.fillRect(0, 0, W, H);
 
-    const gridSpacing = 28 * vp.scale;
-    if (gridSpacing > 6) {
-      const alpha = Math.min(1, (gridSpacing - 6) / 20) * 0.4;
-      ctx.fillStyle = `rgba(100, 90, 70, ${alpha})`;
-      const offX = ((vp.x % gridSpacing) + gridSpacing) % gridSpacing;
-      const offY = ((vp.y % gridSpacing) + gridSpacing) % gridSpacing;
-      for (let gx = offX; gx < W; gx += gridSpacing) {
-        for (let gy = offY; gy < H; gy += gridSpacing) {
-          ctx.beginPath();
-          ctx.arc(gx, gy, Math.min(1.5, vp.scale * 0.8), 0, Math.PI * 2);
-          ctx.fill();
+          // Fixed screen-space grid — not affected by pan or zoom
+          const DOT_SPACING = 28;
+          bgCtx.globalAlpha = 0.3;
+          bgCtx.fillStyle = dotColor;
+          for (let gx = DOT_SPACING / 2; gx < W; gx += DOT_SPACING) {
+            for (let gy = DOT_SPACING / 2; gy < H; gy += DOT_SPACING) {
+              bgCtx.beginPath();
+              bgCtx.arc(gx, gy, 1.5, 0, Math.PI * 2);
+              bgCtx.fill();
+            }
+          }
+          bgCtx.globalAlpha = 1;
         }
       }
     }
 
-    // Read strokes from Yjs
-    const strokes: Stroke[] = [];
-    yStrokesRef.current.forEach((yStroke: Y.Map<any>) => {
-      const s: any = {
-        id: yStroke.get('id'),
-        tool: yStroke.get('tool'),
-        color: yStroke.get('color'),
-        width: yStroke.get('width'),
-        opacity: yStroke.get('opacity'),
-        timestamp: yStroke.get('timestamp') || 0,
-      };
+    // ── Layer 2: strokes + text elements (transparent background) ───────────
+    const strokeCanvas = canvasRef.current;
+    if (strokeCanvas) {
+      const ctx = strokeCanvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, strokeCanvas.width, strokeCanvas.height);
 
-      const yPoints = yStroke.get('points') as Y.Array<number> | undefined;
-      if (yPoints) {
-        s.points = yPoints.toArray();
-      } else {
-        s.x0 = yStroke.get('x0');
-        s.y0 = yStroke.get('y0');
-        s.x1 = yStroke.get('x1');
-        s.y1 = yStroke.get('y1');
+        const strokes: Stroke[] = [];
+        yStrokesRef.current.forEach((yStroke: Y.Map<any>) => {
+          const s: any = {
+            id: yStroke.get('id'),
+            tool: yStroke.get('tool'),
+            color: yStroke.get('color'),
+            width: yStroke.get('width'),
+            opacity: yStroke.get('opacity'),
+            timestamp: yStroke.get('timestamp') || 0,
+          };
+          const yPoints = yStroke.get('points') as Y.Array<number> | undefined;
+          if (yPoints) {
+            s.points = yPoints.toArray();
+          } else {
+            s.x0 = yStroke.get('x0');
+            s.y0 = yStroke.get('y0');
+            s.x1 = yStroke.get('x1');
+            s.y1 = yStroke.get('y1');
+          }
+          strokes.push(s);
+        });
+
+        strokes.sort((a, b) => a.timestamp - b.timestamp);
+        for (const s of strokes) renderStroke(ctx, s, vp);
+
+        // Render text elements (on top of strokes)
+        yTextsRef.current.forEach((yEl: Y.Map<any>) => {
+          const type = yEl.get('type');
+          if (type !== 'text') return;
+          const isEditingThis = (yEl.get('id') as string) === editingTextIdRef.current;
+          if (isEditingThis) return;
+          const x = yEl.get('x') as number;
+          const y = yEl.get('y') as number;
+          const width = yEl.get('width') as number;
+          const height = yEl.get('height') as number;
+          const fontSize = yEl.get('fontSize') as number;
+          const color = yEl.get('color') as string;
+          const boxOpacity = Math.min(1, Math.max(0, (yEl.get('opacity') as number) ?? 1));
+          const ytext = yEl.get('content') as Y.Text;
+          const text = ytext ? ytext.toString() : '';
+          const isSelected = (yEl.get('id') as string) === selectedTextIdRef.current;
+          const textColor = getReadableTextColor(color);
+
+          ctx.save();
+          ctx.font = `${fontSize * vp.scale}px sans-serif`;
+          const { x: sx, y: sy } = worldToScreen(x, y, vp);
+          const boxW = width * vp.scale;
+          const boxH = height * vp.scale;
+          const lineHeight = fontSize * vp.scale * 1.2;
+          const boxRenderH = Math.max(boxH, lineHeight + 8);
+          const ctrlSizePx = 18;
+          const ctrlGapPx = 3;
+          const ctrlY = sy - ctrlSizePx - ctrlGapPx;
+          ctx.fillStyle = rgbaFromHex(color, boxOpacity);
+          ctx.strokeStyle = isSelected ? '#111410' : color;
+          ctx.lineWidth = Math.max(1.25, (isSelected ? 2.4 : 1.5) * vp.scale);
+          ctx.beginPath();
+          ctx.roundRect(sx, sy, boxW, boxRenderH, 8 * vp.scale);
+          ctx.fill();
+          ctx.stroke();
+
+          const mouse = localMouseScreenRef.current;
+          const inBox = mouse !== null &&
+            mouse.x >= sx && mouse.x <= sx + boxW &&
+            mouse.y >= sy && mouse.y <= sy + boxRenderH;
+          const inCtrlStrip = mouse !== null &&
+            mouse.x >= sx && mouse.x <= sx + boxW &&
+            mouse.y >= ctrlY && mouse.y <= sy;
+          const isHovered = inBox || inCtrlStrip;
+          if (isHovered) {
+            const ctrlPad = 2;
+            const deleteX = sx + boxW - ctrlSizePx - ctrlPad;
+
+            // Delete icon button (tiny red X)
+            ctx.fillStyle = '#d32727';
+            ctx.beginPath();
+            ctx.roundRect(deleteX, ctrlY, ctrlSizePx, ctrlSizePx, 4);
+            ctx.fill();
+
+            ctx.font = 'bold 10px Raleway, sans-serif';
+            ctx.fillStyle = '#ffffff';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('X', deleteX + 4.5, ctrlY + ctrlSizePx / 2);
+
+            ctx.textBaseline = 'top';
+          }
+
+          // Hover controls temporarily change the font; reset before drawing text content.
+          ctx.font = `${fontSize * vp.scale}px sans-serif`;
+          ctx.fillStyle = textColor;
+          ctx.textBaseline = 'top';
+          if (!isEditingThis) {
+            const maxLines = Math.max(1, Math.floor((Math.max(boxH, lineHeight + 8) - 12) / lineHeight));
+            const textX = sx + 6;
+            const textWidth = Math.max(1, boxW - 12);
+            let cursorY = sy + 6;
+            let linesDrawn = 0;
+
+            const paragraphs = text.split('\n');
+            for (const paragraph of paragraphs) {
+              let line = '';
+              for (const ch of paragraph) {
+                const testLine = line + ch;
+                if (ctx.measureText(testLine).width > textWidth && line.length > 0) {
+                  ctx.fillText(line, textX, cursorY);
+                  cursorY += lineHeight;
+                  linesDrawn += 1;
+                  if (linesDrawn >= maxLines) break;
+                  line = ch;
+                } else {
+                  line = testLine;
+                }
+              }
+
+              if (linesDrawn >= maxLines) break;
+
+              ctx.fillText(line, textX, cursorY);
+              cursorY += lineHeight;
+              linesDrawn += 1;
+              if (linesDrawn >= maxLines) break;
+
+              // Preserve blank lines between paragraphs if there is vertical room.
+              if (paragraph === '' && linesDrawn < maxLines) {
+                cursorY += lineHeight;
+                linesDrawn += 1;
+                if (linesDrawn >= maxLines) break;
+              } else {
+                // Account for explicit newline between paragraphs.
+                if (linesDrawn < maxLines) {
+                  cursorY += 0;
+                }
+              }
+            }
+          }
+
+          const handleSizePx = 18;
+          const handleX = sx + boxW - handleSizePx - 2;
+          const handleY = sy + boxRenderH - handleSizePx - 2;
+          ctx.fillStyle = 'rgba(17, 20, 16, 0.84)';
+          ctx.beginPath();
+          ctx.roundRect(handleX, handleY, handleSizePx, handleSizePx, 4);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(handleX + 6, handleY + handleSizePx - 6);
+          ctx.lineTo(handleX + handleSizePx - 4, handleY + 4);
+          ctx.moveTo(handleX + 9, handleY + handleSizePx - 4);
+          ctx.lineTo(handleX + handleSizePx - 4, handleY + 9);
+          ctx.stroke();
+          ctx.restore();
+        });
       }
-      strokes.push(s);
-    });
-
-    // Sort strokes by timestamp to maintain z-index order
-    strokes.sort((a, b) => a.timestamp - b.timestamp);
-
-    for (const s of strokes) {
-      renderStroke(ctx, s, vp);
     }
 
-    // Draw remote cursors on top of strokes
-    const nowMs = Date.now();
-    const mouse = localMouseScreenRef.current;
-    remoteCursorsRef.current.forEach((cursor, uid) => {
-      if (nowMs - cursor.lastSeen > 3000) return; // gone stale, skip
-      const { x: sx, y: sy } = worldToScreen(cursor.x, cursor.y, vp);
-      const col = userColor(uid);
+    // ── Layer 3: remote cursors ──────────────────────────────────────────────
+    const cursorCanvas = cursorCanvasRef.current;
+    if (cursorCanvas) {
+      const ctx = cursorCanvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, cursorCanvas.width, cursorCanvas.height);
 
-      ctx.save();
+        const nowMs = Date.now();
+        const mouse = localMouseScreenRef.current;
+        remoteCursorsRef.current.forEach((cursor, uid) => {
+          if (nowMs - cursor.lastSeen > 3000) return;
+          const { x: sx, y: sy } = worldToScreen(cursor.x, cursor.y, vp);
+          const W = cursorCanvas.width;
+          const H = cursorCanvas.height;
+          if (sx < 0 || sx > W || sy < 0 || sy > H) return;
+          const col = userColor(uid);
 
-      // Arrow cursor matching the local SVG cursor shape (tip origin at sx, sy)
-      // SVG path: M2 1 L2 15 L5.5 11.5 L8.5 18 L10.5 17 L7.5 10.5 L13 10.5 Z  (origin 2,1)
-      ctx.fillStyle = col;
-      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-      ctx.lineWidth = 1.5;
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(sx,           sy);          // tip
-      ctx.lineTo(sx,           sy + 14);     // bottom of left side
-      ctx.lineTo(sx + 3.5,     sy + 10.5);   // inner notch
-      ctx.lineTo(sx + 6.5,     sy + 17);     // tail bottom
-      ctx.lineTo(sx + 8.5,     sy + 16);     // tail right edge
-      ctx.lineTo(sx + 5.5,     sy + 9.5);    // inner notch right
-      ctx.lineTo(sx + 11,      sy + 9.5);    // right side of body
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+          ctx.save();
+          ctx.fillStyle = col;
+          ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+          ctx.lineWidth = 1.5;
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          ctx.moveTo(sx,       sy);
+          ctx.lineTo(sx,       sy + 14);
+          ctx.lineTo(sx + 3.5, sy + 10.5);
+          ctx.lineTo(sx + 6.5, sy + 17);
+          ctx.lineTo(sx + 8.5, sy + 16);
+          ctx.lineTo(sx + 5.5, sy + 9.5);
+          ctx.lineTo(sx + 11,  sy + 9.5);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
 
-      // Name label — visible when local mouse is over the cursor arrow's bounding box
-      // Arrow occupies roughly (sx, sy) → (sx+11, sy+17); add 4px padding for easy targeting
-      const hovered = mouse !== null &&
-        mouse.x >= sx - 4 && mouse.x <= sx + 15 &&
-        mouse.y >= sy - 4 && mouse.y <= sy + 21;
-      if (hovered) {
-        ctx.font = 'bold 11px Raleway, sans-serif';
-        const label = cursor.username;
-        const tw = ctx.measureText(label).width;
-        const pad = 5;
-        const lx = sx + 14;
-        const ly = sy + 13;
-        ctx.fillStyle = col;
-        ctx.beginPath();
-        ctx.roundRect(lx - pad, ly - 12, tw + pad * 2, 17, 4);
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.fillText(label, lx, ly);
+          const hovered = mouse !== null &&
+            mouse.x >= sx - 4 && mouse.x <= sx + 15 &&
+            mouse.y >= sy - 4 && mouse.y <= sy + 21;
+          if (hovered) {
+            ctx.font = 'bold 11px Raleway, sans-serif';
+            const label = cursor.username;
+            const tw = ctx.measureText(label).width;
+            const pad = 5;
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            ctx.roundRect(sx + 14 - pad, sy + 1, tw + pad * 2, 17, 4);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.fillText(label, sx + 14, sy + 13);
+          }
+          ctx.restore();
+        });
       }
-
-      ctx.restore();
-    });
-
+    }
   }, []);
 
   // Start render loop
@@ -236,23 +536,87 @@ export default function Whiteboard() {
     return () => cancelAnimationFrame(rafRef.current);
   }, [render]);
 
+  useEffect(() => {
+    editingTextIdRef.current = editingTextId;
+  }, [editingTextId]);
+
+  useEffect(() => {
+    selectedTextIdRef.current = selectedTextId;
+  }, [selectedTextId]);
+
+  useEffect(() => {
+    if (!selectedTextId) return;
+    skipNextTextStyleWriteRef.current = true;
+    skipNextTextFontWriteRef.current = true;
+    const yEl = yTextsRef.current.get(selectedTextId);
+    if (!yEl) return;
+    const boxColor = (yEl.get('color') as string) || '#111410';
+    const boxOpacity = (yEl.get('opacity') as number) ?? 1;
+    const boxFontSize = (yEl.get('fontSize') as number) ?? 18;
+    if (color !== boxColor) setColor(boxColor);
+    if (opacity !== boxOpacity) setOpacity(boxOpacity);
+    if (fontSize !== boxFontSize) setFontSize(boxFontSize);
+  }, [selectedTextId]);
+
+  useEffect(() => {
+    if (!selectedTextId || editingTextIdRef.current === selectedTextId) return;
+    if (skipNextTextStyleWriteRef.current) {
+      skipNextTextStyleWriteRef.current = false;
+      return;
+    }
+    const yEl = yTextsRef.current.get(selectedTextId);
+    if (!yEl) return;
+    const nextColor = color;
+    const nextOpacity = opacity;
+    if (yEl.get('color') === nextColor && (yEl.get('opacity') as number) === nextOpacity) return;
+    ydocRef.current.transact(() => {
+      yEl.set('color', nextColor);
+      yEl.set('opacity', nextOpacity);
+    });
+    markDirty();
+  }, [color, opacity, markDirty, selectedTextId]);
+
+  useEffect(() => {
+    if (!selectedTextId || editingTextIdRef.current === selectedTextId) return;
+    if (skipNextTextFontWriteRef.current) {
+      skipNextTextFontWriteRef.current = false;
+      return;
+    }
+    const yEl = yTextsRef.current.get(selectedTextId);
+    if (!yEl) return;
+    if ((yEl.get('fontSize') as number) === fontSize) return;
+    ydocRef.current.transact(() => {
+      yEl.set('fontSize', fontSize);
+    });
+    markDirty();
+  }, [fontSize, markDirty, selectedTextId]);
+
+  useEffect(() => {
+    if (tool !== 'text' && pendingTextCreate) {
+      setPendingTextCreate(null);
+    }
+  }, [tool, pendingTextCreate]);
+
   // ── Canvas resize ────────────────────────────────────────────────────────────
   useLayoutEffect(() => {
     let centered = false;
 
     function sizeCanvas() {
-      const cv = canvasRef.current;
       const wr = wrapperRef.current;
-      if (!cv || !wr) return;
+      if (!wr) return;
       const { width, height } = wr.getBoundingClientRect();
       if (width < 10 || height < 10) return;
-      cv.width = Math.floor(width);
-      cv.height = Math.floor(height);
+      const w = Math.floor(width);
+      const h = Math.floor(height);
+      [bgCanvasRef.current, canvasRef.current, cursorCanvasRef.current].forEach(cv => {
+        if (cv) { cv.width = w; cv.height = h; }
+      });
       if (!centered) {
-        vpRef.current.x = cv.width / 2;
-        vpRef.current.y = cv.height / 2;
+        vpRef.current.x = w / 2;
+        vpRef.current.y = h / 2;
         centered = true;
       }
+      bgNeedsRender.current = true;
       needsRender.current = true;
     }
 
@@ -269,6 +633,13 @@ export default function Whiteboard() {
     };
   }, [loading]);
 
+  // Redraw background when the user changes the app theme
+  useEffect(() => {
+    const mo = new MutationObserver(() => markBgDirty());
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => mo.disconnect();
+  }, [markBgDirty]);
+
   // ── Load board metadata ───────────────────────────────────────────────────────
   // Two paths:
   //   ?collab=CODE  → guest/invited user, load via public join endpoint
@@ -284,6 +655,11 @@ export default function Whiteboard() {
             setBoardId(bid);
             setBoardTitle(data.title || 'Untitled Board');
             setJoinCode(collabCode);
+            // Hydrate the Yjs doc from the DB state (framed format)
+            for (const update of parseFramedYjsUpdates(data.yjsUpdate)) {
+              Y.applyUpdate(ydocRef.current, update);
+            }
+            markDirty();
           } else {
             setError('Invalid room code');
           }
@@ -299,6 +675,11 @@ export default function Whiteboard() {
             setBoardTitle(data.title || 'Untitled Board');
             // Restore the board's stable join code for the collab button
             if (data.joinCode) setJoinCode(data.joinCode);
+            // Hydrate the Yjs doc from the DB state (framed format)
+            for (const update of parseFramedYjsUpdates(data.yjsUpdate)) {
+              Y.applyUpdate(ydocRef.current, update);
+            }
+            markDirty();
           } else {
             setError('Invalid board ID');
           }
@@ -321,26 +702,18 @@ export default function Whiteboard() {
   useEffect(() => {
     if (!boardId) return;
 
-    // Local IndexedDB Offline Support
-    const indexeddbProvider = new IndexeddbPersistence(boardId, ydocRef.current);
-    
-    indexeddbProvider.on('synced', () => {
-      setStatusMsg('Offline strokes loaded');
-      markDirty();
-      setTimeout(() => setStatusMsg(''), 2500);
-    });
-
     // Listen for any deep changes in the CRDT to trigger a re-render
     const observer = () => markDirty();
     yStrokesRef.current.observeDeep(observer);
-    
+    yTextsRef.current.observeDeep(observer);
+
     // Listen for UndoManager changes to update button states
     undoManagerRef.current.on('stack-item-added', syncUndoState);
     undoManagerRef.current.on('stack-item-popped', syncUndoState);
 
     return () => {
       yStrokesRef.current.unobserveDeep(observer);
-      indexeddbProvider.destroy();
+      yTextsRef.current.unobserveDeep(observer);
     };
   }, [boardId, markDirty, syncUndoState]);
 
@@ -441,6 +814,66 @@ export default function Whiteboard() {
     const vp = vpRef.current;
     const effectiveTool = spaceDown.current ? 'pan' : tool;
 
+    if (e.button === 0) {
+      const { x: wx, y: wy } = screenToWorld(sx, sy, vp);
+      const bodyHit = hitTestTextBody(wx, wy);
+      const controlHit = hitTestTextControlAt(wx, wy);
+      if (controlHit) {
+        setSelectedTextId(controlHit.id);
+        setPendingTextCreate(null);
+
+        if (controlHit.action === 'delete') {
+          ydocRef.current.transact(() => {
+            yTextsRef.current.delete(controlHit.id);
+          });
+          setSelectedTextId((current) => (current === controlHit.id ? null : current));
+          if (editingTextIdRef.current === controlHit.id) {
+            setEditingTextId(null);
+          }
+          markDirty();
+          return;
+        }
+
+        if (controlHit.action === 'resize') {
+          const yEl = yTextsRef.current.get(controlHit.id);
+          if (!yEl) return;
+          activeTextTransform.current = {
+            id: controlHit.id,
+            mode: 'resize',
+            startWx: wx,
+            startWy: wy,
+            startX: yEl.get('x') as number,
+            startY: yEl.get('y') as number,
+            startW: yEl.get('width') as number,
+            startH: yEl.get('height') as number,
+          };
+          return;
+        }
+
+      }
+
+      if (bodyHit && editingTextIdRef.current !== bodyHit.id) {
+        const yEl = yTextsRef.current.get(bodyHit.id);
+        if (yEl) {
+          setSelectedTextId(bodyHit.id);
+          activeTextTransform.current = {
+            id: bodyHit.id,
+            mode: 'move',
+            startWx: wx,
+            startWy: wy,
+            startX: yEl.get('x') as number,
+            startY: yEl.get('y') as number,
+            startW: yEl.get('width') as number,
+            startH: yEl.get('height') as number,
+          };
+          setPendingTextCreate(null);
+          return;
+        }
+      }
+
+      setSelectedTextId(null);
+    }
+
     if (effectiveTool === 'pan' || e.button === 1 || e.button === 2) {
       isPanning.current = true;
       panStart.current = { px: sx, py: sy, vpx: vp.x, vpy: vp.y };
@@ -449,9 +882,41 @@ export default function Whiteboard() {
 
     if (e.button !== 0) return;
 
-    isDrawing.current = true;
     
     const { x: wx, y: wy } = screenToWorld(sx, sy, vp);
+
+    // If text tool, create a text element and open editor, then return
+    if (effectiveTool === 'text') {
+      const hit = hitTestTextAt(wx, wy);
+      if (hit) {
+        setSelectedTextId(hit.id);
+        setPendingTextCreate(null);
+        const yEl = yTextsRef.current.get(hit.id);
+        if (!yEl) return;
+        activeTextTransform.current = {
+          id: hit.id,
+          mode: hit.mode,
+          startWx: wx,
+          startWy: wy,
+          startX: yEl.get('x') as number,
+          startY: yEl.get('y') as number,
+          startW: yEl.get('width') as number,
+          startH: yEl.get('height') as number,
+        };
+        return;
+      }
+
+      setPendingTextCreate({ x: wx, y: wy });
+      // do not start a stroke
+      return;
+    }
+
+    if (pendingTextCreate) {
+      setPendingTextCreate(null);
+    }
+
+    // Start drawing a stroke
+    isDrawing.current = true;
 
     // Create the stroke in Yjs
     const sid = genId();
@@ -462,7 +927,7 @@ export default function Whiteboard() {
       yStroke.set('id', sid);
       yStroke.set('tool', effectiveTool);
       yStroke.set('color', effectiveTool === 'eraser' ? '#000000' : color);
-      yStroke.set('width', lineWidth);
+      yStroke.set('width', lineWidth / vpRef.current.scale);
       yStroke.set('opacity', effectiveTool === 'eraser' ? 1 : opacity);
       yStroke.set('timestamp', Date.now());
 
@@ -478,7 +943,7 @@ export default function Whiteboard() {
       yStrokesRef.current.set(sid, yStroke);
     });
 
-  }, [tool, color, lineWidth, opacity, getCanvasPos]);
+  }, [tool, color, lineWidth, opacity, getCanvasPos, pendingTextCreate]);
 
   // ── Pointer move ──────────────────────────────────────────────────────────────
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -486,6 +951,19 @@ export default function Whiteboard() {
 
     // Track local mouse screen position for cursor label proximity detection
     localMouseScreenRef.current = { x: sx, y: sy };
+    markDirty();
+
+    const hoverWorld = screenToWorld(sx, sy, vpRef.current);
+    const hoverControl = hitTestTextControlHover(hoverWorld.x, hoverWorld.y);
+    if (canvasRef.current) {
+      if (hoverControl) {
+        canvasRef.current.style.cursor = 'pointer';
+      } else if (spaceDown.current) {
+        canvasRef.current.style.cursor = isPanning.current ? 'grabbing' : 'grab';
+      } else {
+        canvasRef.current.style.cursor = getCursor(tool);
+      }
+    }
 
     // Re-render when mouse enters or leaves the cursor's hover area so the label snaps on/off
     const vp = vpRef.current;
@@ -515,6 +993,25 @@ export default function Whiteboard() {
       return;
     }
 
+    if (activeTextTransform.current) {
+      const { x: wx, y: wy } = screenToWorld(sx, sy, vpRef.current);
+      const active = activeTextTransform.current;
+      const yEl = yTextsRef.current.get(active.id);
+      if (!yEl) return;
+
+      ydocRef.current.transact(() => {
+        if (active.mode === 'move') {
+          yEl.set('x', active.startX + (wx - active.startWx));
+          yEl.set('y', active.startY + (wy - active.startWy));
+        } else {
+          yEl.set('width', Math.max(80, active.startW + (wx - active.startWx)));
+          yEl.set('height', Math.max(48, active.startH + (wy - active.startWy)));
+        }
+      });
+      markDirty();
+      return;
+    }
+
     if (!isDrawing.current || !activeStrokeId.current) return;
 
     const { x: wx, y: wy } = screenToWorld(sx, sy, vpRef.current);
@@ -532,14 +1029,20 @@ export default function Whiteboard() {
       yStroke.set('y1', wy);
     }
 
-  }, [getCanvasPos, markDirty]);
+  }, [getCanvasPos, markDirty, tool]);
 
   // ── Pointer up ────────────────────────────────────────────────────────────────
   const onPointerUp = useCallback((_e: React.PointerEvent<HTMLCanvasElement>) => {
     localMouseScreenRef.current = null;
+    markDirty();
     if (isPanning.current) {
       isPanning.current = false;
       panStart.current = null;
+      return;
+    }
+
+    if (activeTextTransform.current) {
+      activeTextTransform.current = null;
       return;
     }
 
@@ -547,7 +1050,29 @@ export default function Whiteboard() {
     isDrawing.current = false;
     activeStrokeId.current = null;
 
-  }, []);
+  }, [markDirty]);
+
+  // Double-click toggles edit mode for the clicked text box.
+  const onCanvasDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const { sx, sy } = getCanvasPos(e.nativeEvent as unknown as PointerEvent);
+    const { x: wx, y: wy } = screenToWorld(sx, sy, vpRef.current);
+
+    const hit = hitTestTextAt(wx, wy);
+    if (hit) {
+      setSelectedTextId(hit.id);
+      setEditingTextId((current) => {
+        const next = current === hit.id ? null : hit.id;
+        editingTextIdRef.current = next;
+        return next;
+      });
+      markDirty();
+      return;
+    }
+
+    editingTextIdRef.current = null;
+    setEditingTextId(null);
+    markDirty();
+  }, [getCanvasPos, markDirty]);
 
   // ── Wheel zoom ────────────────────────────────────────────────────────────────
   const onWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
@@ -577,7 +1102,7 @@ export default function Whiteboard() {
     }
   }, []);
 
-  const onTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+  const onTouchMove = useCallback((e: TouchEvent) => {
     if (e.touches.length === 2 && lastTouches.current?.length === 2) {
       e.preventDefault();
       const [a, b] = [e.touches[0], e.touches[1]];
@@ -609,6 +1134,14 @@ export default function Whiteboard() {
     lastTouches.current = null;
   }, []);
 
+  // touchmove needs a native non-passive listener so preventDefault() works (React makes it passive)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => canvas.removeEventListener('touchmove', onTouchMove);
+  }, [onTouchMove, loading]);
+
   // ── Keyboard shortcuts ────────────────────────────────────────────────────────
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -626,6 +1159,7 @@ export default function Whiteboard() {
       if (e.key === 'v' || e.key === 'V') setTool('pan');
       if (e.key === 'p' || e.key === 'P') setTool('pen');
       if (e.key === 'e' || e.key === 'E') setTool('eraser');
+      if (e.key === 't' || e.key === 'T') setTool('text');
       if (e.key === 'l' || e.key === 'L') setTool('line');
       if (e.key === 'r' || e.key === 'R') setTool('rect');
       if (e.key === 'o' || e.key === 'O') setTool('circle');
@@ -663,32 +1197,153 @@ export default function Whiteboard() {
         // Collect all keys then delete them individually to properly log actions in Yjs
         const keys = Array.from(yStrokesRef.current.keys());
         keys.forEach(key => yStrokesRef.current.delete(key));
+
+        const textKeys = Array.from(yTextsRef.current.keys());
+        textKeys.forEach(key => yTextsRef.current.delete(key));
     });
+    setPendingTextCreate(null);
+    setSelectedTextId(null);
     markDirty();
   }, [markDirty]);
 
-  // ── Download PNG ──────────────────────────────────────────────────────────────
+  // ── Export Dialog ──────────────────────────────────────────────────────────────
   const handleDownload = useCallback(() => {
+    setShowExportDialog(true);
+  }, []);
+
+  const handleExport = useCallback((format: 'png' | 'jpg' | 'svg' | 'pdf') => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const tmp = document.createElement('canvas');
-    tmp.width = canvas.width;
-    tmp.height = canvas.height;
-    const ctx = tmp.getContext('2d')!;
-    ctx.fillStyle = '#F8F6F0';
-    ctx.fillRect(0, 0, tmp.width, tmp.height);
-    ctx.drawImage(canvas, 0, 0);
-    const a = document.createElement('a');
-    a.download = `${boardTitle}.png`;
-    a.href = tmp.toDataURL('image/png');
-    a.click();
+
+    // Get strokes for SVG export
+    const strokes: Stroke[] = [];
+    yStrokesRef.current.forEach((yStroke: Y.Map<any>) => {
+      const s: any = {
+        id: yStroke.get('id'),
+        tool: yStroke.get('tool'),
+        color: yStroke.get('color'),
+        width: yStroke.get('width'),
+        opacity: yStroke.get('opacity'),
+        timestamp: yStroke.get('timestamp') || 0,
+      };
+
+      const yPoints = yStroke.get('points') as Y.Array<number> | undefined;
+      if (yPoints) {
+        s.points = yPoints.toArray();
+      } else {
+        s.x0 = yStroke.get('x0');
+        s.y0 = yStroke.get('y0');
+        s.x1 = yStroke.get('x1');
+        s.y1 = yStroke.get('y1');
+      }
+      strokes.push(s);
+    });
+    strokes.sort((a, b) => a.timestamp - b.timestamp);
+
+    const filename = `${boardTitle}.${format}`;
+
+    if (format === 'png' || format === 'jpg') {
+      // Create temporary canvas with background
+      const tmp = document.createElement('canvas');
+      tmp.width = canvas.width;
+      tmp.height = canvas.height;
+      const ctx = tmp.getContext('2d')!;
+      ctx.fillStyle = '#F8F6F0';
+      ctx.fillRect(0, 0, tmp.width, tmp.height);
+      ctx.drawImage(canvas, 0, 0);
+
+      const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+      const quality = format === 'jpg' ? 0.9 : undefined;
+
+      const a = document.createElement('a');
+      a.download = filename;
+      a.href = tmp.toDataURL(mimeType, quality);
+      a.click();
+    } else if (format === 'svg') {
+      // Generate SVG from strokes
+      const vp = vpRef.current;
+      let svgContent = `<svg width="${canvas.width}" height="${canvas.height}" xmlns="http://www.w3.org/2000/svg">`;
+      svgContent += `<rect width="100%" height="100%" fill="#F8F6F0"/>`;
+
+      strokes.forEach(stroke => {
+        const opacity = stroke.opacity ?? 1;
+        let pathData = '';
+
+        if (stroke.tool === 'pen' || stroke.tool === 'eraser') {
+          const pts = stroke.points!;
+          if (pts && pts.length >= 2) {
+            const p0 = worldToScreen(pts[0], pts[1], vp);
+            pathData = `M ${p0.x} ${p0.y}`;
+            for (let i = 2; i < pts.length; i += 2) {
+              const p = worldToScreen(pts[i], pts[i + 1], vp);
+              pathData += ` L ${p.x} ${p.y}`;
+            }
+          }
+        } else if (stroke.tool === 'line') {
+          const a = worldToScreen(stroke.x0!, stroke.y0!, vp);
+          const b = worldToScreen(stroke.x1!, stroke.y1!, vp);
+          pathData = `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+        } else if (stroke.tool === 'rect') {
+          const a = worldToScreen(stroke.x0!, stroke.y0!, vp);
+          const b = worldToScreen(stroke.x1!, stroke.y1!, vp);
+          const w = b.x - a.x;
+          const h = b.y - a.y;
+          pathData = `M ${a.x} ${a.y} L ${a.x + w} ${a.y} L ${a.x + w} ${a.y + h} L ${a.x} ${a.y + h} Z`;
+        } else if (stroke.tool === 'circle') {
+          const a = worldToScreen(stroke.x0!, stroke.y0!, vp);
+          const b = worldToScreen(stroke.x1!, stroke.y1!, vp);
+          const rx = Math.abs(b.x - a.x) / 2;
+          const ry = Math.abs(b.y - a.y) / 2;
+          const cx = a.x + (b.x - a.x) / 2;
+          const cy = a.y + (b.y - a.y) / 2;
+          pathData = `M ${cx - rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx + rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx - rx} ${cy}`;
+        }
+
+        if (pathData) {
+          const strokeColor = stroke.tool === 'eraser' ? 'none' : stroke.color;
+          const strokeWidth = stroke.width * vp.scale;
+          svgContent += `<path d="${pathData}" stroke="${strokeColor}" stroke-width="${strokeWidth}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;
+        }
+      });
+
+      svgContent += '</svg>';
+
+      const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.download = filename;
+      a.href = url;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else if (format === 'pdf') {
+      // Generate PDF using jsPDF
+      const pdf = new jsPDF({
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
+      });
+
+      // Create temporary canvas with background
+      const tmp = document.createElement('canvas');
+      tmp.width = canvas.width;
+      tmp.height = canvas.height;
+      const ctx = tmp.getContext('2d')!;
+      ctx.fillStyle = '#F8F6F0';
+      ctx.fillRect(0, 0, tmp.width, tmp.height);
+      ctx.drawImage(canvas, 0, 0);
+
+      const imgData = tmp.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      pdf.save(filename);
+    }
+
+    setShowExportDialog(false);
   }, [boardTitle]);
 
   // ── Copy room code ────────────────────────────────────────────────────────────
   const handleCopyCode = useCallback(() => {
     if (!joinCode) return;
-    const url = `${window.location.origin}/join/${joinCode}`;
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(joinCode);
     setCodeCopied(true);
     setTimeout(() => setCodeCopied(false), 2000);
   }, [joinCode]);
@@ -777,15 +1432,54 @@ export default function Whiteboard() {
   }, [boardId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Always-on Yjs update forwarder — checks WS state internally, no dependency on collabActive
+  // Also debounces a full-state save to the DB so non-collab sessions persist too
   useEffect(() => {
+    if (!boardId) return;
+
+    let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleSave = () => {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        const snapshot = Y.encodeStateAsUpdate(ydocRef.current);
+        boardService.saveYjsState(boardId, snapshot).catch(() => {});
+      }, SNAPSHOT_DEBOUNCE_MS);
+    };
+
     const onUpdate = (update: Uint8Array, origin: any) => {
       if (origin !== 'remote' && wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(update.buffer.slice(update.byteOffset, update.byteOffset + update.byteLength) as ArrayBuffer);
       }
+      if (origin !== 'remote') scheduleSave();
     };
+    const flushSave = () => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      const snapshot = Y.encodeStateAsUpdate(ydocRef.current);
+      boardService.saveYjsState(boardId, snapshot).catch(() => {});
+    };
+
+    // keepalive survives page reload/close; axios requests are cancelled on unload
+    const flushSaveOnUnload = () => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      const snapshot = Y.encodeStateAsUpdate(ydocRef.current);
+      boardService.saveYjsStateOnUnload(boardId, snapshot);
+    };
+
+    window.addEventListener('beforeunload', flushSaveOnUnload);
+
     ydocRef.current.on('update', onUpdate);
-    return () => { ydocRef.current.off('update', onUpdate); };
-  }, []);
+    return () => {
+      ydocRef.current.off('update', onUpdate);
+      window.removeEventListener('beforeunload', flushSaveOnUnload);
+      flushSave(); // flush on React unmount (navigating away)
+    };
+  }, [boardId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tear down collab cleanly — clears joinCodeRef BEFORE closing so the
   // onclose handler sees no code and skips the exponential-backoff reconnect.
@@ -853,16 +1547,17 @@ export default function Whiteboard() {
   function getCursor(t: Tool): string {
     if (t === 'pan') return 'grab';
     if (t === 'eraser') return 'cell';
+    if (t === 'text') return 'text';
     return ARROW_CURSOR;
   }
 
   // ── Loading / error screens ───────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[#F4F1EA]">
+      <div className="flex items-center justify-center h-screen bg-base-100">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-2 border-[#4A5D3F] border-t-transparent rounded-full animate-spin" />
-          <p className="font-serif text-[#4A5D3F] italic text-sm">Joining room…</p>
+          <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="font-serif text-primary italic text-sm">Joining room…</p>
         </div>
       </div>
     );
@@ -870,14 +1565,14 @@ export default function Whiteboard() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[#F4F1EA]">
-        <div className="flex flex-col items-center gap-6 p-10 rounded-3xl bg-white border border-[#A67C5244] shadow-xl max-w-sm text-center">
+      <div className="flex items-center justify-center h-screen bg-base-100">
+        <div className="flex flex-col items-center gap-6 p-10 rounded-3xl bg-base-200 border border-base-300 shadow-xl max-w-sm text-center">
           <div className="text-4xl">🔒</div>
-          <h2 className="font-['Playfair_Display',Georgia,serif] text-xl text-[#2D3A27] font-bold">Room Not Found</h2>
-          <p className="font-serif text-sm text-[#A67C52] italic">{error}</p>
+          <h2 className="font-['Playfair_Display',Georgia,serif] text-xl text-base-content font-bold">Room Not Found</h2>
+          <p className="font-serif text-sm text-secondary italic">{error}</p>
           <button
             onClick={() => navigate('/dashboard')}
-            className="px-5 py-2.5 rounded-xl bg-[#4A5D3F] text-[#F4F1EA] font-bold text-xs uppercase tracking-widest hover:bg-[#2D3A27] transition"
+            className="px-5 py-2.5 rounded-xl bg-primary text-primary-content font-bold text-xs uppercase tracking-widest hover:bg-primary/80 transition"
           >
             Back to Dashboard
           </button>
@@ -891,8 +1586,8 @@ export default function Whiteboard() {
   // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div
-      className="flex h-screen overflow-hidden select-none"
-      style={{ background: '#EDEAE2', fontFamily: "'Raleway', sans-serif" }}
+      className="flex h-screen overflow-hidden select-none bg-base-100"
+      style={{ fontFamily: "'Raleway', sans-serif" }}
     >
       <WhiteboardToolbar
         tool={tool}
@@ -921,6 +1616,9 @@ export default function Whiteboard() {
           setLineWidth={setLineWidth}
           opacity={opacity}
           setOpacity={setOpacity}
+          fontSize={fontSize}
+          setFontSize={setFontSize}
+          hasTextSelection={selectedTextId !== null}
           zoomPct={zoomPct}
           zoomAt={zoomAt}
           fitToScreen={fitToScreen}
@@ -933,10 +1631,15 @@ export default function Whiteboard() {
         />
 
         <div ref={wrapperRef} className="relative flex-1 overflow-hidden">
+          {/* Layer 1: background + dot grid */}
+          <canvas ref={bgCanvasRef} className="absolute inset-0" style={{ zIndex: 0 }} />
+
+          {/* Layer 2: strokes + text elements — transparent, receives all pointer events */}
           <canvas
             ref={canvasRef}
             className="absolute inset-0"
             style={{
+              zIndex: 1,
               cursor: spaceDown.current
                 ? (isPanning.current ? 'grabbing' : 'grab')
                 : getCursor(tool),
@@ -948,14 +1651,59 @@ export default function Whiteboard() {
             onPointerLeave={onPointerUp}
             onWheel={onWheel}
             onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
             onContextMenu={e => e.preventDefault()}
+            onDoubleClick={onCanvasDoubleClick}
           />
+
+          {/* Layer 3: remote cursors — pointer-events disabled so clicks pass through */}
+          <canvas
+            ref={cursorCanvasRef}
+            className="absolute inset-0"
+            style={{ zIndex: 2, pointerEvents: 'none' }}
+          />
+
+          <TextEditorOverlay
+            yElement={ editingTextId ? (yTextsRef.current.get(editingTextId) as Y.Map<any>) : null }
+            worldToScreen={worldToScreen}
+            vp={vpRef.current}
+            onClose={() => {
+              editingTextIdRef.current = null;
+              setEditingTextId(null);
+              markDirty();
+            }}
+          />
+
+          {pendingTextCreate && tool === 'text' && (() => {
+            const anchor = worldToScreen(pendingTextCreate.x, pendingTextCreate.y, vpRef.current);
+            return (
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  createPendingTextBox();
+                }}
+                className="absolute z-40 rounded-full border border-[#2D3A27]/30 bg-[#F8F6F0] px-3 py-1 text-[11px] font-semibold text-[#2D3A27] shadow-md hover:bg-[#EAE5D7]"
+                style={{
+                  left: Math.round(anchor.x),
+                  top: Math.round(anchor.y - 34),
+                }}
+              >
+                Create text box here
+              </button>
+            );
+          })()}
 
           <WhiteboardHUD tool={tool} />
         </div>
       </div>
+
+      <ExportDialog
+        isOpen={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+        onExport={handleExport}
+      />
     </div>
   );
 }

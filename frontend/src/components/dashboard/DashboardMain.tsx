@@ -78,8 +78,8 @@ const DashboardMain = () => {
     <div className="h-full flex-1 min-w-0 relative">
       <main
           className="w-full h-full
-          rounded-3xl p-8 flex flex-col overflow-hidden
-          shadow-md border border-neutral
+          p-8 flex flex-col overflow-hidden
+          shadow-md border-t border-neutral
           bg-base-200 gap-2"
         >
                 <RoomSection />

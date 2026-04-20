@@ -105,7 +105,14 @@ const boardSchema = new Schema<BoardDocument>(
 			},
 		},
 	},
-	{ timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
+	{
+		timestamps: true,
+		toJSON: {
+			virtuals: true,
+			transform: (_doc, ret) => { delete ret.yjsUpdate; return ret; },
+		},
+		toObject: { virtuals: true },
+	}
 );
 
 // Explicit board id field for clients. MongoDB already stores this as _id.

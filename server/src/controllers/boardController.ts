@@ -73,8 +73,9 @@ export const joinBoardByCode = async (req: Request, res: Response) => {
       return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: 'Invalid room code.' });
     }
 
-    // Success! Return the board data (which includes the board._id we need for Socket.io)
-    return res.status(HTTPStatusCodes.OK).json(board);
+    // Include yjsUpdate for whiteboard hydration (stripped by default toJSON transform)
+    const data = board.toObject({ virtuals: true });
+    return res.status(HTTPStatusCodes.OK).json({ ...data, yjsUpdate: board.yjsUpdate });
   } catch (err) {
     console.error("Error joining board:", err);
     return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Server error joining board' });
@@ -97,7 +98,9 @@ export const getBoardById = async (req: AuthRequest, res: Response) => {
       return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: 'Board not found or unauthorized' });
     }
 
-    return res.status(HTTPStatusCodes.OK).json(board);
+    // Include yjsUpdate for whiteboard hydration (stripped by default toJSON transform)
+    const data = board.toObject({ virtuals: true });
+    return res.status(HTTPStatusCodes.OK).json({ ...data, yjsUpdate: board.yjsUpdate });
   } catch (err) {
     console.error("Error fetching board by ID:", err);
     return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Server error fetching board' });
@@ -165,6 +168,43 @@ export const updateBoard = async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error("Error updating board:", err);
     return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Server error updating board' });
+  }
+};
+
+// PUT /api/boards/:id/yjs
+// PROTECTED: Saves the full Yjs document state from the browser (replaces existing snapshot)
+export const saveYjsStateFromBrowser = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    const incomingBuffer = req.body;
+
+    if (!Buffer.isBuffer(incomingBuffer) || incomingBuffer.length === 0) {
+      return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: 'Invalid or empty body' });
+    }
+
+    const board = await Board.findOne({ _id: id, owner: userId });
+    if (!board) {
+      return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: 'Board not found or unauthorized' });
+    }
+
+    // Wrap the raw Yjs snapshot in inksubserver's framing format:
+    // [4-byte big-endian length][raw Yjs bytes]
+    // so the inksubserver can deserialize it correctly on next room open.
+    const framed = Buffer.alloc(4 + incomingBuffer.length);
+    framed.writeUInt32BE(incomingBuffer.length, 0);
+    incomingBuffer.copy(framed, 4);
+    board.yjsUpdate = framed;
+    await board.save();
+
+    return res.status(HTTPStatusCodes.OK).json({ ok: true });
+  } catch (err) {
+    console.error('Error saving Yjs state from browser:', err);
+    return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Server error saving Yjs state' });
   }
 };
 

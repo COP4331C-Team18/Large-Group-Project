@@ -7,8 +7,34 @@ export const PALETTE = [
 ];
 
 export const SNAPSHOT_DEBOUNCE_MS = 20_000;
-export const MIN_SCALE = 0.05;
-export const MAX_SCALE = 20;
+
+/**
+ * Parses the inksubserver framing format stored in MongoDB yjsUpdate:
+ *   [4-byte big-endian uint32 length][raw Yjs update bytes] × N
+ * MongoDB Buffers arrive over JSON as { type: 'Buffer', data: number[] }
+ * or occasionally as a plain number array.
+ */
+export function parseFramedYjsUpdates(raw: any): Uint8Array[] {
+  let bytes: Uint8Array | null = null;
+  if (raw instanceof Uint8Array) bytes = raw;
+  else if (Array.isArray(raw?.data) && raw.data.length > 0) bytes = new Uint8Array(raw.data);
+  else if (Array.isArray(raw) && raw.length > 0) bytes = new Uint8Array(raw);
+  if (!bytes || bytes.byteLength < 4) return [];
+
+  const updates: Uint8Array[] = [];
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let pos = 0;
+  while (pos + 4 <= bytes.byteLength) {
+    const len = view.getUint32(pos, false); // big-endian, matches htonl in C++
+    pos += 4;
+    if (pos + len > bytes.byteLength) break;
+    updates.push(bytes.slice(pos, pos + len));
+    pos += len;
+  }
+  return updates;
+}
+export const MIN_SCALE = 0.0000001;
+export const MAX_SCALE = 100000000;
 
 let _idCounter = 0;
 export function genId(): string {
@@ -47,7 +73,7 @@ export function renderStroke(
     ctx.strokeStyle = stroke.color;
   }
 
-  ctx.lineWidth = stroke.width * vp.scale;
+  ctx.lineWidth = Math.min(stroke.width * vp.scale, 10000);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
