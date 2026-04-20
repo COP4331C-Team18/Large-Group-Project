@@ -202,7 +202,7 @@ export default function Profile() {
         <div
           className="input-fields-container
             flex flex-col gap-6
-            bg-white border border-primary/20 border-t-[3px] border-t-cap
+            bg-base-100 border border-primary/20 border-t-[3px] border-t-primary
             rounded px-9 py-8
             w-full max-w-[460px]
           "
