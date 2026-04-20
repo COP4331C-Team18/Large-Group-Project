@@ -687,8 +687,7 @@ export default function Whiteboard() {
   // ── Copy room code ────────────────────────────────────────────────────────────
   const handleCopyCode = useCallback(() => {
     if (!joinCode) return;
-    const url = `${window.location.origin}/join/${joinCode}`;
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(joinCode);
     setCodeCopied(true);
     setTimeout(() => setCodeCopied(false), 2000);
   }, [joinCode]);
