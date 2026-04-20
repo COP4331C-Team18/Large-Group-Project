@@ -8,6 +8,8 @@ export interface UserDocument extends Document {
   verified: boolean;
   verificationCode: string | null;
   verificationCodeExpires: Date | null;
+  resetPasswordToken?: string | null;
+  resetPasswordExpires?: Date | null;
   provider: "inkboard" | "google";
   avatarId: string;
   comparePassword(candidate: string): Promise<boolean>;
@@ -58,6 +60,16 @@ const userSchema = new Schema<UserDocument>(
       type: String,
       enum: ["inkboard", "google"],
       default: "inkboard",
+    },
+
+    // for resetting password
+    resetPasswordToken: { 
+      type: String, 
+      default: null 
+    },
+    resetPasswordExpires: { 
+      type: Date, 
+      default: null 
     },
 
     // avatar preset id
