@@ -32,7 +32,7 @@ class AuthChoiceScreen extends StatelessWidget {
       ),
       body: DottedBackground(
         child: SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 28.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -41,7 +41,7 @@ class AuthChoiceScreen extends StatelessWidget {
                 _buildHeader(context),
                 const SizedBox(height: 36),
                 _buildOptions(context),
-                const Spacer(),
+                const SizedBox(height: 48),
               ],
             ),
           ),
