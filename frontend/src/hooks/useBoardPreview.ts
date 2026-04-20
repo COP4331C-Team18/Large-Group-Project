@@ -1,8 +1,8 @@
 import { useEffect, type RefObject } from 'react';
 import * as Y from 'yjs';
-import { IndexeddbPersistence } from 'y-indexeddb';
-import { renderStroke } from '@/utils/whiteboardUtils';
+import { renderStroke, parseFramedYjsUpdates } from '@/utils/whiteboardUtils';
 import type { Stroke, Viewport } from '@/types/whiteboard';
+import { boardService } from '@/api/services/boardService';
 
 function computeFitViewport(strokes: Stroke[], W: number, H: number, padding = 16): Viewport {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -40,55 +40,57 @@ export function useBoardPreview(
 ) {
   useEffect(() => {
     if (!boardId) return;
+    let cancelled = false;
 
-    const doc = new Y.Doc();
-    const persistence = new IndexeddbPersistence(String(boardId), doc);
-    let destroyed = false;
+    boardService.getBoardById(String(boardId))
+      .then((board) => {
+        if (cancelled) return;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
 
-    persistence.on('synced', () => {
-      if (destroyed) return;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+        const doc = new Y.Doc();
 
-      const { width: W, height: H } = canvas;
-
-      const yStrokes = doc.getMap<Y.Map<any>>('strokes');
-      const strokes: Stroke[] = [];
-      yStrokes.forEach((yStroke) => {
-        const s: any = {
-          id: yStroke.get('id'),
-          tool: yStroke.get('tool'),
-          color: yStroke.get('color'),
-          width: yStroke.get('width'),
-          opacity: yStroke.get('opacity'),
-          timestamp: yStroke.get('timestamp') ?? 0,
-        };
-        const yPoints = yStroke.get('points') as Y.Array<number> | undefined;
-        if (yPoints) {
-          s.points = yPoints.toArray();
-        } else {
-          s.x0 = yStroke.get('x0');
-          s.y0 = yStroke.get('y0');
-          s.x1 = yStroke.get('x1');
-          s.y1 = yStroke.get('y1');
+        for (const update of parseFramedYjsUpdates(board.yjsUpdate)) {
+          Y.applyUpdate(doc, update);
         }
-        strokes.push(s);
-      });
-      strokes.sort((a, b) => a.timestamp - b.timestamp);
 
-      const vp = computeFitViewport(strokes, W, H, padding);
-      ctx.clearRect(0, 0, W, H);
-      for (const s of strokes) {
-        renderStroke(ctx, s, vp);
-      }
-    });
+        const { width: W, height: H } = canvas;
+        const yStrokes = doc.getMap<Y.Map<any>>('strokes');
+        const strokes: Stroke[] = [];
+        yStrokes.forEach((yStroke) => {
+          const s: any = {
+            id: yStroke.get('id'),
+            tool: yStroke.get('tool'),
+            color: yStroke.get('color'),
+            width: yStroke.get('width'),
+            opacity: yStroke.get('opacity'),
+            timestamp: yStroke.get('timestamp') ?? 0,
+          };
+          const yPoints = yStroke.get('points') as Y.Array<number> | undefined;
+          if (yPoints) {
+            s.points = yPoints.toArray();
+          } else {
+            s.x0 = yStroke.get('x0');
+            s.y0 = yStroke.get('y0');
+            s.x1 = yStroke.get('x1');
+            s.y1 = yStroke.get('y1');
+          }
+          strokes.push(s);
+        });
+        strokes.sort((a, b) => a.timestamp - b.timestamp);
 
-    return () => {
-      destroyed = true;
-      persistence.destroy();
-      doc.destroy();
-    };
+        const vp = computeFitViewport(strokes, W, H, padding);
+        ctx.clearRect(0, 0, W, H);
+        for (const s of strokes) {
+          renderStroke(ctx, s, vp);
+        }
+
+        doc.destroy();
+      })
+      .catch(() => { /* preview silently stays blank on error */ });
+
+    return () => { cancelled = true; };
   }, [boardId, canvasRef, padding]);
 }

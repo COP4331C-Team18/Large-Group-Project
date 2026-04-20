@@ -8,7 +8,7 @@ export default function DashboardNavBar() {
  
   return (
     <nav
-      className="navbar px-5 rounded-3xl bg-base-200 border border-neutral shadow-md"
+      className="navbar px-5 bg-base-200 border-b border-neutral shadow-md"
     >
       {/* LEFT: Logo / Home Link */}
       <div className="flex-1">
