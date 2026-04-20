@@ -27,7 +27,10 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '10mb', type: (req) => {
+  const ct = req.headers['content-type'] || '';
+  return !ct.includes('application/octet-stream');
+}}));
 app.use(cookieParser());
 app.use(rateLimiter);
 

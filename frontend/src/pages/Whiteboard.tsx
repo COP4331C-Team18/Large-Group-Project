@@ -4,22 +4,34 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import * as Y from 'yjs';
-import { IndexeddbPersistence } from 'y-indexeddb';
 
 // Internal Components
 import WhiteboardHeader from '../components/whiteboard/WhiteboardHeader';
 import WhiteboardToolbar from '../components/whiteboard/WhiteboardToolbar';
 import WhiteboardHUD from '../components/whiteboard/WhiteboardHUD';
 import TextEditorOverlay from '../components/whiteboard/TextEditorOverlay';
+import ExportDialog from '../components/whiteboard/ExportDialog';
 
 // Utils and Types
 import { boardService } from '@/api/services/boardService';
+import { THEMES } from '@/config/theme';
 import type { Tool, Stroke, Viewport } from '../types/whiteboard';
 import {
   genId, screenToWorld, worldToScreen, renderStroke,
-  MIN_SCALE, MAX_SCALE
+  MIN_SCALE, MAX_SCALE, SNAPSHOT_DEBOUNCE_MS, parseFramedYjsUpdates
 } from '../utils/whiteboardUtils';
 
+// External libraries
+import jsPDF from 'jspdf';
+
+function getThemeColors() {
+  const themeId = document.documentElement.getAttribute('data-theme') ?? 'inkboard';
+  const theme = THEMES.find(t => t.id === themeId);
+  return {
+    bg: theme?.swatch.base ?? '#F8F6F0',
+    dotColor: theme?.swatch.content ?? '#111410',
+  };
+}
 
 // Deterministic cursor color from userId
 function userColor(userId: string): string {
@@ -32,6 +44,7 @@ function userColor(userId: string): string {
 }
 
 type RemoteCursor = { x: number; y: number; username: string; lastSeen: number };
+
 
 export default function Whiteboard() {
   const { id } = useParams<{ id: string }>();
@@ -61,9 +74,12 @@ export default function Whiteboard() {
   const [pendingTextCreate, setPendingTextCreate] = useState<{ x: number; y: number } | null>(null);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [fontSize, setFontSize] = useState(18);
+  const [showExportDialog, setShowExportDialog] = useState(false);
 
-  // Canvas refs
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Canvas refs — 3 layers stacked
+  const bgCanvasRef = useRef<HTMLCanvasElement>(null);     // layer 1: background + dots
+  const canvasRef = useRef<HTMLCanvasElement>(null);       // layer 2: strokes (receives pointer events)
+  const cursorCanvasRef = useRef<HTMLCanvasElement>(null); // layer 3: remote cursors
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Viewport (pan + zoom)
@@ -124,9 +140,11 @@ export default function Whiteboard() {
   // Animation frame for render loop
   const rafRef = useRef<number>(0);
   const needsRender = useRef(true);
+  const bgNeedsRender = useRef(true); // only set on resize or theme change
 
   // ── Dirty flag helpers ──────────────────────────────────────────────────────
   const markDirty = useCallback(() => { needsRender.current = true; }, []);
+  const markBgDirty = useCallback(() => { bgNeedsRender.current = true; needsRender.current = true; }, []);
 
   // ── Undo/redo state sync ─────────────────────────────────────────────────────
   const syncUndoState = useCallback(() => {
@@ -263,246 +281,253 @@ export default function Whiteboard() {
     if (!needsRender.current) return;
     needsRender.current = false;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
     const vp = vpRef.current;
-    const W = canvas.width;
-    const H = canvas.height;
 
-    // Background + grid
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#F8F6F0';
-    ctx.fillRect(0, 0, W, H);
+    // ── Layer 1: fixed background + dot grid (redraws only on resize/theme) ──
+    if (bgNeedsRender.current) {
+      bgNeedsRender.current = false;
+      const bgCanvas = bgCanvasRef.current;
+      if (bgCanvas) {
+        const bgCtx = bgCanvas.getContext('2d');
+        if (bgCtx) {
+          const { bg, dotColor } = getThemeColors();
+          const W = bgCanvas.width;
+          const H = bgCanvas.height;
+          bgCtx.clearRect(0, 0, W, H);
+          bgCtx.fillStyle = bg;
+          bgCtx.fillRect(0, 0, W, H);
 
-    const gridSpacing = 28 * vp.scale;
-    if (gridSpacing > 6) {
-      const alpha = Math.min(1, (gridSpacing - 6) / 20) * 0.4;
-      ctx.fillStyle = `rgba(100, 90, 70, ${alpha})`;
-      const offX = ((vp.x % gridSpacing) + gridSpacing) % gridSpacing;
-      const offY = ((vp.y % gridSpacing) + gridSpacing) % gridSpacing;
-      for (let gx = offX; gx < W; gx += gridSpacing) {
-        for (let gy = offY; gy < H; gy += gridSpacing) {
-          ctx.beginPath();
-          ctx.arc(gx, gy, Math.min(1.5, vp.scale * 0.8), 0, Math.PI * 2);
-          ctx.fill();
+          // Fixed screen-space grid — not affected by pan or zoom
+          const DOT_SPACING = 28;
+          bgCtx.globalAlpha = 0.3;
+          bgCtx.fillStyle = dotColor;
+          for (let gx = DOT_SPACING / 2; gx < W; gx += DOT_SPACING) {
+            for (let gy = DOT_SPACING / 2; gy < H; gy += DOT_SPACING) {
+              bgCtx.beginPath();
+              bgCtx.arc(gx, gy, 1.5, 0, Math.PI * 2);
+              bgCtx.fill();
+            }
+          }
+          bgCtx.globalAlpha = 1;
         }
       }
     }
 
-    // Read strokes from Yjs
-    const strokes: Stroke[] = [];
-    yStrokesRef.current.forEach((yStroke: Y.Map<any>) => {
-      const s: any = {
-        id: yStroke.get('id'),
-        tool: yStroke.get('tool'),
-        color: yStroke.get('color'),
-        width: yStroke.get('width'),
-        opacity: yStroke.get('opacity'),
-        timestamp: yStroke.get('timestamp') || 0,
-      };
+    // ── Layer 2: strokes + text elements (transparent background) ───────────
+    const strokeCanvas = canvasRef.current;
+    if (strokeCanvas) {
+      const ctx = strokeCanvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, strokeCanvas.width, strokeCanvas.height);
 
-      const yPoints = yStroke.get('points') as Y.Array<number> | undefined;
-      if (yPoints) {
-        s.points = yPoints.toArray();
-      } else {
-        s.x0 = yStroke.get('x0');
-        s.y0 = yStroke.get('y0');
-        s.x1 = yStroke.get('x1');
-        s.y1 = yStroke.get('y1');
-      }
-      strokes.push(s);
-    });
+        const strokes: Stroke[] = [];
+        yStrokesRef.current.forEach((yStroke: Y.Map<any>) => {
+          const s: any = {
+            id: yStroke.get('id'),
+            tool: yStroke.get('tool'),
+            color: yStroke.get('color'),
+            width: yStroke.get('width'),
+            opacity: yStroke.get('opacity'),
+            timestamp: yStroke.get('timestamp') || 0,
+          };
+          const yPoints = yStroke.get('points') as Y.Array<number> | undefined;
+          if (yPoints) {
+            s.points = yPoints.toArray();
+          } else {
+            s.x0 = yStroke.get('x0');
+            s.y0 = yStroke.get('y0');
+            s.x1 = yStroke.get('x1');
+            s.y1 = yStroke.get('y1');
+          }
+          strokes.push(s);
+        });
 
-    // Sort strokes by timestamp to maintain z-index order
-    strokes.sort((a, b) => a.timestamp - b.timestamp);
+        strokes.sort((a, b) => a.timestamp - b.timestamp);
+        for (const s of strokes) renderStroke(ctx, s, vp);
 
-    for (const s of strokes) {
-      renderStroke(ctx, s, vp);
-    }
+        // Render text elements (on top of strokes)
+        yTextsRef.current.forEach((yEl: Y.Map<any>) => {
+          const type = yEl.get('type');
+          if (type !== 'text') return;
+          const isEditingThis = (yEl.get('id') as string) === editingTextIdRef.current;
+          if (isEditingThis) return;
+          const x = yEl.get('x') as number;
+          const y = yEl.get('y') as number;
+          const width = yEl.get('width') as number;
+          const height = yEl.get('height') as number;
+          const fontSize = yEl.get('fontSize') as number;
+          const color = yEl.get('color') as string;
+          const boxOpacity = Math.min(1, Math.max(0, (yEl.get('opacity') as number) ?? 1));
+          const ytext = yEl.get('content') as Y.Text;
+          const text = ytext ? ytext.toString() : '';
+          const isSelected = (yEl.get('id') as string) === selectedTextIdRef.current;
+          const textColor = getReadableTextColor(color);
 
-    // Render text elements (on top of strokes)
-    yTextsRef.current.forEach((yEl: Y.Map<any>) => {
-      const type = yEl.get('type');
-      if (type !== 'text') return;
-      const isEditingThis = (yEl.get('id') as string) === editingTextIdRef.current;
-      if (isEditingThis) return;
-      const x = yEl.get('x') as number;
-      const y = yEl.get('y') as number;
-      const width = yEl.get('width') as number;
-      const height = yEl.get('height') as number;
-      const fontSize = yEl.get('fontSize') as number;
-      const color = yEl.get('color') as string;
-      const boxOpacity = Math.min(1, Math.max(0, (yEl.get('opacity') as number) ?? 1));
-      const ytext = yEl.get('content') as Y.Text;
-      const text = ytext ? ytext.toString() : '';
-      const isSelected = (yEl.get('id') as string) === selectedTextIdRef.current;
-      const textColor = getReadableTextColor(color);
+          ctx.save();
+          ctx.font = `${fontSize * vp.scale}px sans-serif`;
+          const { x: sx, y: sy } = worldToScreen(x, y, vp);
+          const boxW = width * vp.scale;
+          const boxH = height * vp.scale;
+          const lineHeight = fontSize * vp.scale * 1.2;
+          const boxRenderH = Math.max(boxH, lineHeight + 8);
+          const ctrlSizePx = 18;
+          const ctrlGapPx = 3;
+          const ctrlY = sy - ctrlSizePx - ctrlGapPx;
+          ctx.fillStyle = rgbaFromHex(color, boxOpacity);
+          ctx.strokeStyle = isSelected ? '#111410' : color;
+          ctx.lineWidth = Math.max(1.25, (isSelected ? 2.4 : 1.5) * vp.scale);
+          ctx.beginPath();
+          ctx.roundRect(sx, sy, boxW, boxRenderH, 8 * vp.scale);
+          ctx.fill();
+          ctx.stroke();
 
-      ctx.save();
-      ctx.font = `${fontSize * vp.scale}px sans-serif`;
-      const { x: sx, y: sy } = worldToScreen(x, y, vp);
-      const boxW = width * vp.scale;
-      const boxH = height * vp.scale;
-      const lineHeight = fontSize * vp.scale * 1.2;
-      const boxRenderH = Math.max(boxH, lineHeight + 8);
-      const ctrlSizePx = 18;
-      const ctrlGapPx = 3;
-      const ctrlY = sy - ctrlSizePx - ctrlGapPx;
-      ctx.fillStyle = rgbaFromHex(color, boxOpacity);
-      ctx.strokeStyle = isSelected ? '#111410' : color;
-      ctx.lineWidth = Math.max(1.25, (isSelected ? 2.4 : 1.5) * vp.scale);
-      ctx.beginPath();
-      ctx.roundRect(sx, sy, boxW, boxRenderH, 8 * vp.scale);
-      ctx.fill();
-      ctx.stroke();
+          const mouse = localMouseScreenRef.current;
+          const inBox = mouse !== null &&
+            mouse.x >= sx && mouse.x <= sx + boxW &&
+            mouse.y >= sy && mouse.y <= sy + boxRenderH;
+          const inCtrlStrip = mouse !== null &&
+            mouse.x >= sx && mouse.x <= sx + boxW &&
+            mouse.y >= ctrlY && mouse.y <= sy;
+          const isHovered = inBox || inCtrlStrip;
+          if (isHovered) {
+            const ctrlPad = 2;
+            const deleteX = sx + boxW - ctrlSizePx - ctrlPad;
 
-      const mouse = localMouseScreenRef.current;
-      const inBox = mouse !== null &&
-        mouse.x >= sx && mouse.x <= sx + boxW &&
-        mouse.y >= sy && mouse.y <= sy + boxRenderH;
-      const inCtrlStrip = mouse !== null &&
-        mouse.x >= sx && mouse.x <= sx + boxW &&
-        mouse.y >= ctrlY && mouse.y <= sy;
-      const isHovered = inBox || inCtrlStrip;
-      if (isHovered) {
-        const ctrlPad = 2;
-        const deleteX = sx + boxW - ctrlSizePx - ctrlPad;
+            // Delete icon button (tiny red X)
+            ctx.fillStyle = '#d32727';
+            ctx.beginPath();
+            ctx.roundRect(deleteX, ctrlY, ctrlSizePx, ctrlSizePx, 4);
+            ctx.fill();
 
-        // Delete icon button (tiny red X)
-        ctx.fillStyle = '#d32727';
-        ctx.beginPath();
-        ctx.roundRect(deleteX, ctrlY, ctrlSizePx, ctrlSizePx, 4);
-        ctx.fill();
+            ctx.font = 'bold 10px Raleway, sans-serif';
+            ctx.fillStyle = '#ffffff';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('X', deleteX + 4.5, ctrlY + ctrlSizePx / 2);
 
-        ctx.font = 'bold 10px Raleway, sans-serif';
-        ctx.fillStyle = '#ffffff';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('X', deleteX + 4.5, ctrlY + ctrlSizePx / 2);
+            ctx.textBaseline = 'top';
+          }
 
-        ctx.textBaseline = 'top';
-      }
+          // Hover controls temporarily change the font; reset before drawing text content.
+          ctx.font = `${fontSize * vp.scale}px sans-serif`;
+          ctx.fillStyle = textColor;
+          ctx.textBaseline = 'top';
+          if (!isEditingThis) {
+            const maxLines = Math.max(1, Math.floor((Math.max(boxH, lineHeight + 8) - 12) / lineHeight));
+            const textX = sx + 6;
+            const textWidth = Math.max(1, boxW - 12);
+            let cursorY = sy + 6;
+            let linesDrawn = 0;
 
-      // Hover controls temporarily change the font; reset before drawing text content.
-      ctx.font = `${fontSize * vp.scale}px sans-serif`;
-      ctx.fillStyle = textColor;
-      ctx.textBaseline = 'top';
-      if (!isEditingThis) {
-        const maxLines = Math.max(1, Math.floor((Math.max(boxH, lineHeight + 8) - 12) / lineHeight));
-        const textX = sx + 6;
-        const textWidth = Math.max(1, boxW - 12);
-        let cursorY = sy + 6;
-        let linesDrawn = 0;
+            const paragraphs = text.split('\n');
+            for (const paragraph of paragraphs) {
+              let line = '';
+              for (const ch of paragraph) {
+                const testLine = line + ch;
+                if (ctx.measureText(testLine).width > textWidth && line.length > 0) {
+                  ctx.fillText(line, textX, cursorY);
+                  cursorY += lineHeight;
+                  linesDrawn += 1;
+                  if (linesDrawn >= maxLines) break;
+                  line = ch;
+                } else {
+                  line = testLine;
+                }
+              }
 
-        const paragraphs = text.split('\n');
-        for (const paragraph of paragraphs) {
-          let line = '';
-          for (const ch of paragraph) {
-            const testLine = line + ch;
-            if (ctx.measureText(testLine).width > textWidth && line.length > 0) {
+              if (linesDrawn >= maxLines) break;
+
               ctx.fillText(line, textX, cursorY);
               cursorY += lineHeight;
               linesDrawn += 1;
               if (linesDrawn >= maxLines) break;
-              line = ch;
-            } else {
-              line = testLine;
+
+              // Preserve blank lines between paragraphs if there is vertical room.
+              if (paragraph === '' && linesDrawn < maxLines) {
+                cursorY += lineHeight;
+                linesDrawn += 1;
+                if (linesDrawn >= maxLines) break;
+              } else {
+                // Account for explicit newline between paragraphs.
+                if (linesDrawn < maxLines) {
+                  cursorY += 0;
+                }
+              }
             }
           }
 
-          if (linesDrawn >= maxLines) break;
+          const handleSizePx = 18;
+          const handleX = sx + boxW - handleSizePx - 2;
+          const handleY = sy + boxRenderH - handleSizePx - 2;
+          ctx.fillStyle = 'rgba(17, 20, 16, 0.84)';
+          ctx.beginPath();
+          ctx.roundRect(handleX, handleY, handleSizePx, handleSizePx, 4);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(handleX + 6, handleY + handleSizePx - 6);
+          ctx.lineTo(handleX + handleSizePx - 4, handleY + 4);
+          ctx.moveTo(handleX + 9, handleY + handleSizePx - 4);
+          ctx.lineTo(handleX + handleSizePx - 4, handleY + 9);
+          ctx.stroke();
+          ctx.restore();
+        });
+      }
+    }
 
-          ctx.fillText(line, textX, cursorY);
-          cursorY += lineHeight;
-          linesDrawn += 1;
-          if (linesDrawn >= maxLines) break;
+    // ── Layer 3: remote cursors ──────────────────────────────────────────────
+    const cursorCanvas = cursorCanvasRef.current;
+    if (cursorCanvas) {
+      const ctx = cursorCanvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, cursorCanvas.width, cursorCanvas.height);
 
-          // Preserve blank lines between paragraphs if there is vertical room.
-          if (paragraph === '' && linesDrawn < maxLines) {
-            cursorY += lineHeight;
-            linesDrawn += 1;
-            if (linesDrawn >= maxLines) break;
-          } else {
-            // Account for explicit newline between paragraphs.
-            if (linesDrawn < maxLines) {
-              cursorY += 0;
-            }
+        const nowMs = Date.now();
+        const mouse = localMouseScreenRef.current;
+        remoteCursorsRef.current.forEach((cursor, uid) => {
+          if (nowMs - cursor.lastSeen > 3000) return;
+          const { x: sx, y: sy } = worldToScreen(cursor.x, cursor.y, vp);
+          const W = cursorCanvas.width;
+          const H = cursorCanvas.height;
+          if (sx < 0 || sx > W || sy < 0 || sy > H) return;
+          const col = userColor(uid);
+
+          ctx.save();
+          ctx.fillStyle = col;
+          ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+          ctx.lineWidth = 1.5;
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          ctx.moveTo(sx,       sy);
+          ctx.lineTo(sx,       sy + 14);
+          ctx.lineTo(sx + 3.5, sy + 10.5);
+          ctx.lineTo(sx + 6.5, sy + 17);
+          ctx.lineTo(sx + 8.5, sy + 16);
+          ctx.lineTo(sx + 5.5, sy + 9.5);
+          ctx.lineTo(sx + 11,  sy + 9.5);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          const hovered = mouse !== null &&
+            mouse.x >= sx - 4 && mouse.x <= sx + 15 &&
+            mouse.y >= sy - 4 && mouse.y <= sy + 21;
+          if (hovered) {
+            ctx.font = 'bold 11px Raleway, sans-serif';
+            const label = cursor.username;
+            const tw = ctx.measureText(label).width;
+            const pad = 5;
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            ctx.roundRect(sx + 14 - pad, sy + 1, tw + pad * 2, 17, 4);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.fillText(label, sx + 14, sy + 13);
           }
-        }
+          ctx.restore();
+        });
       }
-
-      const handleSizePx = 18;
-      const handleX = sx + boxW - handleSizePx - 2;
-      const handleY = sy + boxRenderH - handleSizePx - 2;
-      ctx.fillStyle = 'rgba(17, 20, 16, 0.84)';
-      ctx.beginPath();
-      ctx.roundRect(handleX, handleY, handleSizePx, handleSizePx, 4);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.65)';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(handleX + 6, handleY + handleSizePx - 6);
-      ctx.lineTo(handleX + handleSizePx - 4, handleY + 4);
-      ctx.moveTo(handleX + 9, handleY + handleSizePx - 4);
-      ctx.lineTo(handleX + handleSizePx - 4, handleY + 9);
-      ctx.stroke();
-      ctx.restore();
-    });
-
-
-    // Draw remote cursors on top of strokes
-    const nowMs = Date.now();
-    const mouse = localMouseScreenRef.current;
-    remoteCursorsRef.current.forEach((cursor, uid) => {
-      if (nowMs - cursor.lastSeen > 3000) return; // gone stale, skip
-      const { x: sx, y: sy } = worldToScreen(cursor.x, cursor.y, vp);
-      const col = userColor(uid);
-
-      ctx.save();
-
-      // Arrow cursor matching the local SVG cursor shape (tip origin at sx, sy)
-      // SVG path: M2 1 L2 15 L5.5 11.5 L8.5 18 L10.5 17 L7.5 10.5 L13 10.5 Z  (origin 2,1)
-      ctx.fillStyle = col;
-      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-      ctx.lineWidth = 1.5;
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(sx,           sy);          // tip
-      ctx.lineTo(sx,           sy + 14);     // bottom of left side
-      ctx.lineTo(sx + 3.5,     sy + 10.5);   // inner notch
-      ctx.lineTo(sx + 6.5,     sy + 17);     // tail bottom
-      ctx.lineTo(sx + 8.5,     sy + 16);     // tail right edge
-      ctx.lineTo(sx + 5.5,     sy + 9.5);    // inner notch right
-      ctx.lineTo(sx + 11,      sy + 9.5);    // right side of body
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      // Name label — visible when local mouse is over the cursor arrow's bounding box
-      // Arrow occupies roughly (sx, sy) → (sx+11, sy+17); add 4px padding for easy targeting
-      const hovered = mouse !== null &&
-        mouse.x >= sx - 4 && mouse.x <= sx + 15 &&
-        mouse.y >= sy - 4 && mouse.y <= sy + 21;
-      if (hovered) {
-        ctx.font = 'bold 11px Raleway, sans-serif';
-        const label = cursor.username;
-        const tw = ctx.measureText(label).width;
-        const pad = 5;
-        const lx = sx + 14;
-        const ly = sy + 13;
-        ctx.fillStyle = col;
-        ctx.beginPath();
-        ctx.roundRect(lx - pad, ly - 12, tw + pad * 2, 17, 4);
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.fillText(label, lx, ly);
-      }
-
-      ctx.restore();
-    });
-
+    }
   }, []);
 
   // Start render loop
@@ -577,18 +602,21 @@ export default function Whiteboard() {
     let centered = false;
 
     function sizeCanvas() {
-      const cv = canvasRef.current;
       const wr = wrapperRef.current;
-      if (!cv || !wr) return;
+      if (!wr) return;
       const { width, height } = wr.getBoundingClientRect();
       if (width < 10 || height < 10) return;
-      cv.width = Math.floor(width);
-      cv.height = Math.floor(height);
+      const w = Math.floor(width);
+      const h = Math.floor(height);
+      [bgCanvasRef.current, canvasRef.current, cursorCanvasRef.current].forEach(cv => {
+        if (cv) { cv.width = w; cv.height = h; }
+      });
       if (!centered) {
-        vpRef.current.x = cv.width / 2;
-        vpRef.current.y = cv.height / 2;
+        vpRef.current.x = w / 2;
+        vpRef.current.y = h / 2;
         centered = true;
       }
+      bgNeedsRender.current = true;
       needsRender.current = true;
     }
 
@@ -605,6 +633,13 @@ export default function Whiteboard() {
     };
   }, [loading]);
 
+  // Redraw background when the user changes the app theme
+  useEffect(() => {
+    const mo = new MutationObserver(() => markBgDirty());
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => mo.disconnect();
+  }, [markBgDirty]);
+
   // ── Load board metadata ───────────────────────────────────────────────────────
   // Two paths:
   //   ?collab=CODE  → guest/invited user, load via public join endpoint
@@ -620,6 +655,11 @@ export default function Whiteboard() {
             setBoardId(bid);
             setBoardTitle(data.title || 'Untitled Board');
             setJoinCode(collabCode);
+            // Hydrate the Yjs doc from the DB state (framed format)
+            for (const update of parseFramedYjsUpdates(data.yjsUpdate)) {
+              Y.applyUpdate(ydocRef.current, update);
+            }
+            markDirty();
           } else {
             setError('Invalid room code');
           }
@@ -635,6 +675,11 @@ export default function Whiteboard() {
             setBoardTitle(data.title || 'Untitled Board');
             // Restore the board's stable join code for the collab button
             if (data.joinCode) setJoinCode(data.joinCode);
+            // Hydrate the Yjs doc from the DB state (framed format)
+            for (const update of parseFramedYjsUpdates(data.yjsUpdate)) {
+              Y.applyUpdate(ydocRef.current, update);
+            }
+            markDirty();
           } else {
             setError('Invalid board ID');
           }
@@ -657,20 +702,11 @@ export default function Whiteboard() {
   useEffect(() => {
     if (!boardId) return;
 
-    // Local IndexedDB Offline Support
-    const indexeddbProvider = new IndexeddbPersistence(boardId, ydocRef.current);
-    
-    indexeddbProvider.on('synced', () => {
-      setStatusMsg('Offline strokes loaded');
-      markDirty();
-      setTimeout(() => setStatusMsg(''), 2500);
-    });
-
     // Listen for any deep changes in the CRDT to trigger a re-render
     const observer = () => markDirty();
     yStrokesRef.current.observeDeep(observer);
     yTextsRef.current.observeDeep(observer);
-    
+
     // Listen for UndoManager changes to update button states
     undoManagerRef.current.on('stack-item-added', syncUndoState);
     undoManagerRef.current.on('stack-item-popped', syncUndoState);
@@ -678,7 +714,6 @@ export default function Whiteboard() {
     return () => {
       yStrokesRef.current.unobserveDeep(observer);
       yTextsRef.current.unobserveDeep(observer);
-      indexeddbProvider.destroy();
     };
   }, [boardId, markDirty, syncUndoState]);
 
@@ -892,7 +927,7 @@ export default function Whiteboard() {
       yStroke.set('id', sid);
       yStroke.set('tool', effectiveTool);
       yStroke.set('color', effectiveTool === 'eraser' ? '#000000' : color);
-      yStroke.set('width', lineWidth);
+      yStroke.set('width', lineWidth / vpRef.current.scale);
       yStroke.set('opacity', effectiveTool === 'eraser' ? 1 : opacity);
       yStroke.set('timestamp', Date.now());
 
@@ -1067,7 +1102,7 @@ export default function Whiteboard() {
     }
   }, []);
 
-  const onTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+  const onTouchMove = useCallback((e: TouchEvent) => {
     if (e.touches.length === 2 && lastTouches.current?.length === 2) {
       e.preventDefault();
       const [a, b] = [e.touches[0], e.touches[1]];
@@ -1098,6 +1133,14 @@ export default function Whiteboard() {
   const onTouchEnd = useCallback(() => {
     lastTouches.current = null;
   }, []);
+
+  // touchmove needs a native non-passive listener so preventDefault() works (React makes it passive)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => canvas.removeEventListener('touchmove', onTouchMove);
+  }, [onTouchMove, loading]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1163,28 +1206,144 @@ export default function Whiteboard() {
     markDirty();
   }, [markDirty]);
 
-  // ── Download PNG ──────────────────────────────────────────────────────────────
+  // ── Export Dialog ──────────────────────────────────────────────────────────────
   const handleDownload = useCallback(() => {
+    setShowExportDialog(true);
+  }, []);
+
+  const handleExport = useCallback((format: 'png' | 'jpg' | 'svg' | 'pdf') => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const tmp = document.createElement('canvas');
-    tmp.width = canvas.width;
-    tmp.height = canvas.height;
-    const ctx = tmp.getContext('2d')!;
-    ctx.fillStyle = '#F8F6F0';
-    ctx.fillRect(0, 0, tmp.width, tmp.height);
-    ctx.drawImage(canvas, 0, 0);
-    const a = document.createElement('a');
-    a.download = `${boardTitle}.png`;
-    a.href = tmp.toDataURL('image/png');
-    a.click();
+
+    // Get strokes for SVG export
+    const strokes: Stroke[] = [];
+    yStrokesRef.current.forEach((yStroke: Y.Map<any>) => {
+      const s: any = {
+        id: yStroke.get('id'),
+        tool: yStroke.get('tool'),
+        color: yStroke.get('color'),
+        width: yStroke.get('width'),
+        opacity: yStroke.get('opacity'),
+        timestamp: yStroke.get('timestamp') || 0,
+      };
+
+      const yPoints = yStroke.get('points') as Y.Array<number> | undefined;
+      if (yPoints) {
+        s.points = yPoints.toArray();
+      } else {
+        s.x0 = yStroke.get('x0');
+        s.y0 = yStroke.get('y0');
+        s.x1 = yStroke.get('x1');
+        s.y1 = yStroke.get('y1');
+      }
+      strokes.push(s);
+    });
+    strokes.sort((a, b) => a.timestamp - b.timestamp);
+
+    const filename = `${boardTitle}.${format}`;
+
+    if (format === 'png' || format === 'jpg') {
+      // Create temporary canvas with background
+      const tmp = document.createElement('canvas');
+      tmp.width = canvas.width;
+      tmp.height = canvas.height;
+      const ctx = tmp.getContext('2d')!;
+      ctx.fillStyle = '#F8F6F0';
+      ctx.fillRect(0, 0, tmp.width, tmp.height);
+      ctx.drawImage(canvas, 0, 0);
+
+      const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+      const quality = format === 'jpg' ? 0.9 : undefined;
+
+      const a = document.createElement('a');
+      a.download = filename;
+      a.href = tmp.toDataURL(mimeType, quality);
+      a.click();
+    } else if (format === 'svg') {
+      // Generate SVG from strokes
+      const vp = vpRef.current;
+      let svgContent = `<svg width="${canvas.width}" height="${canvas.height}" xmlns="http://www.w3.org/2000/svg">`;
+      svgContent += `<rect width="100%" height="100%" fill="#F8F6F0"/>`;
+
+      strokes.forEach(stroke => {
+        const opacity = stroke.opacity ?? 1;
+        let pathData = '';
+
+        if (stroke.tool === 'pen' || stroke.tool === 'eraser') {
+          const pts = stroke.points!;
+          if (pts && pts.length >= 2) {
+            const p0 = worldToScreen(pts[0], pts[1], vp);
+            pathData = `M ${p0.x} ${p0.y}`;
+            for (let i = 2; i < pts.length; i += 2) {
+              const p = worldToScreen(pts[i], pts[i + 1], vp);
+              pathData += ` L ${p.x} ${p.y}`;
+            }
+          }
+        } else if (stroke.tool === 'line') {
+          const a = worldToScreen(stroke.x0!, stroke.y0!, vp);
+          const b = worldToScreen(stroke.x1!, stroke.y1!, vp);
+          pathData = `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+        } else if (stroke.tool === 'rect') {
+          const a = worldToScreen(stroke.x0!, stroke.y0!, vp);
+          const b = worldToScreen(stroke.x1!, stroke.y1!, vp);
+          const w = b.x - a.x;
+          const h = b.y - a.y;
+          pathData = `M ${a.x} ${a.y} L ${a.x + w} ${a.y} L ${a.x + w} ${a.y + h} L ${a.x} ${a.y + h} Z`;
+        } else if (stroke.tool === 'circle') {
+          const a = worldToScreen(stroke.x0!, stroke.y0!, vp);
+          const b = worldToScreen(stroke.x1!, stroke.y1!, vp);
+          const rx = Math.abs(b.x - a.x) / 2;
+          const ry = Math.abs(b.y - a.y) / 2;
+          const cx = a.x + (b.x - a.x) / 2;
+          const cy = a.y + (b.y - a.y) / 2;
+          pathData = `M ${cx - rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx + rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx - rx} ${cy}`;
+        }
+
+        if (pathData) {
+          const strokeColor = stroke.tool === 'eraser' ? 'none' : stroke.color;
+          const strokeWidth = stroke.width * vp.scale;
+          svgContent += `<path d="${pathData}" stroke="${strokeColor}" stroke-width="${strokeWidth}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;
+        }
+      });
+
+      svgContent += '</svg>';
+
+      const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.download = filename;
+      a.href = url;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else if (format === 'pdf') {
+      // Generate PDF using jsPDF
+      const pdf = new jsPDF({
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
+      });
+
+      // Create temporary canvas with background
+      const tmp = document.createElement('canvas');
+      tmp.width = canvas.width;
+      tmp.height = canvas.height;
+      const ctx = tmp.getContext('2d')!;
+      ctx.fillStyle = '#F8F6F0';
+      ctx.fillRect(0, 0, tmp.width, tmp.height);
+      ctx.drawImage(canvas, 0, 0);
+
+      const imgData = tmp.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      pdf.save(filename);
+    }
+
+    setShowExportDialog(false);
   }, [boardTitle]);
 
   // ── Copy room code ────────────────────────────────────────────────────────────
   const handleCopyCode = useCallback(() => {
     if (!joinCode) return;
-    const url = `${window.location.origin}/join/${joinCode}`;
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(joinCode);
     setCodeCopied(true);
     setTimeout(() => setCodeCopied(false), 2000);
   }, [joinCode]);
@@ -1273,15 +1432,54 @@ export default function Whiteboard() {
   }, [boardId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Always-on Yjs update forwarder — checks WS state internally, no dependency on collabActive
+  // Also debounces a full-state save to the DB so non-collab sessions persist too
   useEffect(() => {
+    if (!boardId) return;
+
+    let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleSave = () => {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        const snapshot = Y.encodeStateAsUpdate(ydocRef.current);
+        boardService.saveYjsState(boardId, snapshot).catch(() => {});
+      }, SNAPSHOT_DEBOUNCE_MS);
+    };
+
     const onUpdate = (update: Uint8Array, origin: any) => {
       if (origin !== 'remote' && wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(update.buffer.slice(update.byteOffset, update.byteOffset + update.byteLength) as ArrayBuffer);
       }
+      if (origin !== 'remote') scheduleSave();
     };
+    const flushSave = () => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      const snapshot = Y.encodeStateAsUpdate(ydocRef.current);
+      boardService.saveYjsState(boardId, snapshot).catch(() => {});
+    };
+
+    // keepalive survives page reload/close; axios requests are cancelled on unload
+    const flushSaveOnUnload = () => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      const snapshot = Y.encodeStateAsUpdate(ydocRef.current);
+      boardService.saveYjsStateOnUnload(boardId, snapshot);
+    };
+
+    window.addEventListener('beforeunload', flushSaveOnUnload);
+
     ydocRef.current.on('update', onUpdate);
-    return () => { ydocRef.current.off('update', onUpdate); };
-  }, []);
+    return () => {
+      ydocRef.current.off('update', onUpdate);
+      window.removeEventListener('beforeunload', flushSaveOnUnload);
+      flushSave(); // flush on React unmount (navigating away)
+    };
+  }, [boardId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tear down collab cleanly — clears joinCodeRef BEFORE closing so the
   // onclose handler sees no code and skips the exponential-backoff reconnect.
@@ -1356,10 +1554,10 @@ export default function Whiteboard() {
   // ── Loading / error screens ───────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[#F4F1EA]">
+      <div className="flex items-center justify-center h-screen bg-base-100">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-2 border-[#4A5D3F] border-t-transparent rounded-full animate-spin" />
-          <p className="font-serif text-[#4A5D3F] italic text-sm">Joining room…</p>
+          <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="font-serif text-primary italic text-sm">Joining room…</p>
         </div>
       </div>
     );
@@ -1367,14 +1565,14 @@ export default function Whiteboard() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[#F4F1EA]">
-        <div className="flex flex-col items-center gap-6 p-10 rounded-3xl bg-white border border-[#A67C5244] shadow-xl max-w-sm text-center">
+      <div className="flex items-center justify-center h-screen bg-base-100">
+        <div className="flex flex-col items-center gap-6 p-10 rounded-3xl bg-base-200 border border-base-300 shadow-xl max-w-sm text-center">
           <div className="text-4xl">🔒</div>
-          <h2 className="font-['Playfair_Display',Georgia,serif] text-xl text-[#2D3A27] font-bold">Room Not Found</h2>
-          <p className="font-serif text-sm text-[#A67C52] italic">{error}</p>
+          <h2 className="font-['Playfair_Display',Georgia,serif] text-xl text-base-content font-bold">Room Not Found</h2>
+          <p className="font-serif text-sm text-secondary italic">{error}</p>
           <button
             onClick={() => navigate('/dashboard')}
-            className="px-5 py-2.5 rounded-xl bg-[#4A5D3F] text-[#F4F1EA] font-bold text-xs uppercase tracking-widest hover:bg-[#2D3A27] transition"
+            className="px-5 py-2.5 rounded-xl bg-primary text-primary-content font-bold text-xs uppercase tracking-widest hover:bg-primary/80 transition"
           >
             Back to Dashboard
           </button>
@@ -1388,8 +1586,8 @@ export default function Whiteboard() {
   // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div
-      className="flex h-screen overflow-hidden select-none"
-      style={{ background: '#EDEAE2', fontFamily: "'Raleway', sans-serif" }}
+      className="flex h-screen overflow-hidden select-none bg-base-100"
+      style={{ fontFamily: "'Raleway', sans-serif" }}
     >
       <WhiteboardToolbar
         tool={tool}
@@ -1433,10 +1631,15 @@ export default function Whiteboard() {
         />
 
         <div ref={wrapperRef} className="relative flex-1 overflow-hidden">
+          {/* Layer 1: background + dot grid */}
+          <canvas ref={bgCanvasRef} className="absolute inset-0" style={{ zIndex: 0 }} />
+
+          {/* Layer 2: strokes + text elements — transparent, receives all pointer events */}
           <canvas
             ref={canvasRef}
             className="absolute inset-0"
             style={{
+              zIndex: 1,
               cursor: spaceDown.current
                 ? (isPanning.current ? 'grabbing' : 'grab')
                 : getCursor(tool),
@@ -1448,10 +1651,16 @@ export default function Whiteboard() {
             onPointerLeave={onPointerUp}
             onWheel={onWheel}
             onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
             onContextMenu={e => e.preventDefault()}
             onDoubleClick={onCanvasDoubleClick}
+          />
+
+          {/* Layer 3: remote cursors — pointer-events disabled so clicks pass through */}
+          <canvas
+            ref={cursorCanvasRef}
+            className="absolute inset-0"
+            style={{ zIndex: 2, pointerEvents: 'none' }}
           />
 
           <TextEditorOverlay
@@ -1489,6 +1698,12 @@ export default function Whiteboard() {
           <WhiteboardHUD tool={tool} />
         </div>
       </div>
+
+      <ExportDialog
+        isOpen={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+        onExport={handleExport}
+      />
     </div>
   );
 }

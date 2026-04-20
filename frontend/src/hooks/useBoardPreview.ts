@@ -1,8 +1,8 @@
 import { useEffect, type RefObject } from 'react';
 import * as Y from 'yjs';
-import { IndexeddbPersistence } from 'y-indexeddb';
-import { renderStroke, worldToScreen } from '@/utils/whiteboardUtils';
+import { renderStroke, parseFramedYjsUpdates, worldToScreen } from '@/utils/whiteboardUtils';
 import type { Stroke, Viewport } from '@/types/whiteboard';
+import { boardService } from '@/api/services/boardService';
 
 type PreviewText = {
   x: number;
@@ -74,130 +74,133 @@ export function useBoardPreview(
 ) {
   useEffect(() => {
     if (!boardId) return;
+    let cancelled = false;
 
-    const doc = new Y.Doc();
-    const persistence = new IndexeddbPersistence(String(boardId), doc);
-    let destroyed = false;
+    boardService.getBoardById(String(boardId))
+      .then((board) => {
+        if (cancelled) return;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
 
-    persistence.on('synced', () => {
-      if (destroyed) return;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+        const doc = new Y.Doc();
 
-      const { width: W, height: H } = canvas;
-
-      const yStrokes = doc.getMap<Y.Map<any>>('strokes');
-      const yTexts = doc.getMap<Y.Map<any>>('texts');
-      const strokes: Stroke[] = [];
-      const texts: Array<PreviewText & {
-        color: string;
-        opacity: number;
-        fontSize: number;
-        text: string;
-      }> = [];
-      yStrokes.forEach((yStroke) => {
-        const s: any = {
-          id: yStroke.get('id'),
-          tool: yStroke.get('tool'),
-          color: yStroke.get('color'),
-          width: yStroke.get('width'),
-          opacity: yStroke.get('opacity'),
-          timestamp: yStroke.get('timestamp') ?? 0,
-        };
-        const yPoints = yStroke.get('points') as Y.Array<number> | undefined;
-        if (yPoints) {
-          s.points = yPoints.toArray();
-        } else {
-          s.x0 = yStroke.get('x0');
-          s.y0 = yStroke.get('y0');
-          s.x1 = yStroke.get('x1');
-          s.y1 = yStroke.get('y1');
+        for (const update of parseFramedYjsUpdates(board.yjsUpdate)) {
+          Y.applyUpdate(doc, update);
         }
-        strokes.push(s);
-      });
 
-      yTexts.forEach((yEl) => {
-        if (yEl.get('type') !== 'text') return;
-        const ytext = yEl.get('content') as Y.Text | undefined;
-        texts.push({
-          x: (yEl.get('x') as number) ?? 0,
-          y: (yEl.get('y') as number) ?? 0,
-          width: Math.max(1, (yEl.get('width') as number) ?? 180),
-          height: Math.max(1, (yEl.get('height') as number) ?? 72),
-          color: (yEl.get('color') as string) ?? '#111410',
-          opacity: Math.min(1, Math.max(0, (yEl.get('opacity') as number) ?? 1)),
-          fontSize: Math.max(10, (yEl.get('fontSize') as number) ?? 18),
-          text: ytext ? ytext.toString() : '',
+        const { width: W, height: H } = canvas;
+        const yStrokes = doc.getMap<Y.Map<any>>('strokes');
+        const yTexts = doc.getMap<Y.Map<any>>('texts');
+        const strokes: Stroke[] = [];
+        const texts: Array<PreviewText & {
+          color: string;
+          opacity: number;
+          fontSize: number;
+          text: string;
+        }> = [];
+
+        yStrokes.forEach((yStroke) => {
+          const s: any = {
+            id: yStroke.get('id'),
+            tool: yStroke.get('tool'),
+            color: yStroke.get('color'),
+            width: yStroke.get('width'),
+            opacity: yStroke.get('opacity'),
+            timestamp: yStroke.get('timestamp') ?? 0,
+          };
+          const yPoints = yStroke.get('points') as Y.Array<number> | undefined;
+          if (yPoints) {
+            s.points = yPoints.toArray();
+          } else {
+            s.x0 = yStroke.get('x0');
+            s.y0 = yStroke.get('y0');
+            s.x1 = yStroke.get('x1');
+            s.y1 = yStroke.get('y1');
+          }
+          strokes.push(s);
         });
-      });
 
-      strokes.sort((a, b) => a.timestamp - b.timestamp);
+        yTexts.forEach((yEl) => {
+          if (yEl.get('type') !== 'text') return;
+          const ytext = yEl.get('content') as Y.Text | undefined;
+          texts.push({
+            x: (yEl.get('x') as number) ?? 0,
+            y: (yEl.get('y') as number) ?? 0,
+            width: Math.max(1, (yEl.get('width') as number) ?? 180),
+            height: Math.max(1, (yEl.get('height') as number) ?? 72),
+            color: (yEl.get('color') as string) ?? '#111410',
+            opacity: Math.min(1, Math.max(0, (yEl.get('opacity') as number) ?? 1)),
+            fontSize: Math.max(10, (yEl.get('fontSize') as number) ?? 18),
+            text: ytext ? ytext.toString() : '',
+          });
+        });
 
-      const vp = computeFitViewport(strokes, texts, W, H, padding);
-      ctx.clearRect(0, 0, W, H);
-      for (const s of strokes) {
-        renderStroke(ctx, s, vp);
-      }
+        strokes.sort((a, b) => a.timestamp - b.timestamp);
 
-      for (const t of texts) {
-        const { x: sx, y: sy } = worldToScreen(t.x, t.y, vp);
-        const boxW = t.width * vp.scale;
-        const boxH = t.height * vp.scale;
-        const lineHeight = t.fontSize * vp.scale * 1.2;
-        const boxRenderH = Math.max(boxH, lineHeight + 8);
-        const textX = sx + 6;
-        const textWidth = Math.max(1, boxW - 12);
+        const vp = computeFitViewport(strokes, texts, W, H, padding);
+        ctx.clearRect(0, 0, W, H);
+        for (const s of strokes) {
+          renderStroke(ctx, s, vp);
+        }
 
-        ctx.save();
-        ctx.fillStyle = rgbaFromHex(t.color, t.opacity);
-        ctx.strokeStyle = t.color;
-        ctx.lineWidth = Math.max(1.25, 1.5 * vp.scale);
-        ctx.beginPath();
-        ctx.roundRect(sx, sy, boxW, boxRenderH, 8 * vp.scale);
-        ctx.fill();
-        ctx.stroke();
+        for (const t of texts) {
+          const { x: sx, y: sy } = worldToScreen(t.x, t.y, vp);
+          const boxW = t.width * vp.scale;
+          const boxH = t.height * vp.scale;
+          const lineHeight = t.fontSize * vp.scale * 1.2;
+          const boxRenderH = Math.max(boxH, lineHeight + 8);
+          const textX = sx + 6;
+          const textWidth = Math.max(1, boxW - 12);
 
-        ctx.font = `${t.fontSize * vp.scale}px sans-serif`;
-        ctx.fillStyle = getReadableTextColor(t.color);
-        ctx.textBaseline = 'top';
+          ctx.save();
+          ctx.fillStyle = rgbaFromHex(t.color, t.opacity);
+          ctx.strokeStyle = t.color;
+          ctx.lineWidth = Math.max(1.25, 1.5 * vp.scale);
+          ctx.beginPath();
+          ctx.roundRect(sx, sy, boxW, boxRenderH, 8 * vp.scale);
+          ctx.fill();
+          ctx.stroke();
 
-        let cursorY = sy + 6;
-        const maxLines = Math.max(1, Math.floor((Math.max(boxH, lineHeight + 8) - 12) / lineHeight));
-        let linesDrawn = 0;
-        const paragraphs = t.text.split('\n');
+          ctx.font = `${t.fontSize * vp.scale}px sans-serif`;
+          ctx.fillStyle = getReadableTextColor(t.color);
+          ctx.textBaseline = 'top';
 
-        for (const paragraph of paragraphs) {
-          let line = '';
-          for (const ch of paragraph) {
-            const testLine = line + ch;
-            if (ctx.measureText(testLine).width > textWidth && line.length > 0) {
-              ctx.fillText(line, textX, cursorY);
-              cursorY += lineHeight;
-              linesDrawn += 1;
-              if (linesDrawn >= maxLines) break;
-              line = ch;
-            } else {
-              line = testLine;
+          let cursorY = sy + 6;
+          const maxLines = Math.max(1, Math.floor((Math.max(boxH, lineHeight + 8) - 12) / lineHeight));
+          let linesDrawn = 0;
+          const paragraphs = t.text.split('\n');
+
+          for (const paragraph of paragraphs) {
+            let line = '';
+            for (const ch of paragraph) {
+              const testLine = line + ch;
+              if (ctx.measureText(testLine).width > textWidth && line.length > 0) {
+                ctx.fillText(line, textX, cursorY);
+                cursorY += lineHeight;
+                linesDrawn += 1;
+                if (linesDrawn >= maxLines) break;
+                line = ch;
+              } else {
+                line = testLine;
+              }
             }
+
+            if (linesDrawn >= maxLines) break;
+            ctx.fillText(line, textX, cursorY);
+            cursorY += lineHeight;
+            linesDrawn += 1;
+            if (linesDrawn >= maxLines) break;
           }
 
-          if (linesDrawn >= maxLines) break;
-          ctx.fillText(line, textX, cursorY);
-          cursorY += lineHeight;
-          linesDrawn += 1;
-          if (linesDrawn >= maxLines) break;
+          ctx.restore();
         }
 
-        ctx.restore();
-      }
-    });
+        doc.destroy();
+      })
+      .catch(() => { /* preview silently stays blank on error */ });
 
-    return () => {
-      destroyed = true;
-      persistence.destroy();
-      doc.destroy();
-    };
+    return () => { cancelled = true; };
   }, [boardId, canvasRef, padding]);
 }
