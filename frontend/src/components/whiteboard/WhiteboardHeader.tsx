@@ -17,6 +17,9 @@ interface WhiteboardHeaderProps {
   setLineWidth: React.Dispatch<React.SetStateAction<number>>;
   opacity: number;
   setOpacity: (opacity: number) => void;
+  fontSize: number;
+  setFontSize: React.Dispatch<React.SetStateAction<number>>;
+  hasTextSelection: boolean;
   zoomPct: number;
   zoomAt: (sx: number, sy: number, delta: number) => void;
   fitToScreen: () => void;
@@ -39,6 +42,9 @@ const WhiteboardHeader: React.FC<WhiteboardHeaderProps> = ({
   setLineWidth,
   opacity,
   setOpacity,
+  fontSize,
+  setFontSize,
+  hasTextSelection,
   zoomPct,
   zoomAt,
   fitToScreen,
@@ -66,7 +72,14 @@ const WhiteboardHeader: React.FC<WhiteboardHeaderProps> = ({
       <div className="flex-1" />
 
       {/* Color palette */}
-      <div className="flex items-center gap-1">
+      <div
+        className="flex items-center gap-1 px-2 py-1 rounded-lg border border-secondary/10"
+        style={hasTextSelection ? { background: 'rgba(196,169,106,0.08)', borderColor: 'rgba(196,169,106,0.25)' } : undefined}
+        title={hasTextSelection ? 'Selected text box background color' : 'Stroke color'}
+      >
+        <span className="mr-1 text-[10px] font-bold uppercase tracking-wider text-secondary whitespace-nowrap">
+          {hasTextSelection ? 'Text box background' : 'Color'}
+        </span>
         {PALETTE.map(c => (
           <button
             key={c}
@@ -129,8 +142,13 @@ const WhiteboardHeader: React.FC<WhiteboardHeaderProps> = ({
       </div>
 
       {/* Opacity */}
-      <div className="flex items-center gap-2 px-3 border-l border-secondary/20">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-secondary">α</span>
+      <div
+        className="flex items-center gap-2 px-3 border-l border-secondary/20"
+        title={hasTextSelection ? 'Selected text box opacity' : 'Stroke opacity'}
+      >
+        <span className="text-[10px] font-bold uppercase tracking-wider text-secondary">
+          {hasTextSelection ? 'Text box opacity' : 'α'}
+        </span>
         <input
           type="range"
           min={0.05}
@@ -145,6 +163,41 @@ const WhiteboardHeader: React.FC<WhiteboardHeaderProps> = ({
           {Math.round(opacity * 100)}%
         </span>
       </div>
+
+      {hasTextSelection && (
+        <div className="flex items-center gap-2 px-3 border-l border-secondary/20">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-secondary">Aa</span>
+          <button
+            type="button"
+            onClick={() => setFontSize(size => Math.max(8, size - 1))}
+            className="text-primary hover:text-primary/80 transition font-bold text-sm leading-none"
+            title="Smaller text"
+          >
+            −
+          </button>
+          <input
+            type="range"
+            min={8}
+            max={72}
+            step={1}
+            value={fontSize}
+            onChange={e => setFontSize(parseInt(e.target.value, 10))}
+            className="w-20 h-1 accent-primary"
+            title={`Font size: ${fontSize}px`}
+          />
+          <button
+            type="button"
+            onClick={() => setFontSize(size => Math.min(72, size + 1))}
+            className="text-primary hover:text-primary/80 transition font-bold text-sm leading-none"
+            title="Bigger text"
+          >
+            +
+          </button>
+          <span className="text-[10px] font-mono text-secondary" style={{ minWidth: 30 }}>
+            {fontSize}px
+          </span>
+        </div>
+      )}
 
       {/* Zoom controls */}
       <div className="flex items-center gap-1 px-3 border-l border-secondary/20">

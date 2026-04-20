@@ -9,6 +9,7 @@ import * as Y from 'yjs';
 import WhiteboardHeader from '../components/whiteboard/WhiteboardHeader';
 import WhiteboardToolbar from '../components/whiteboard/WhiteboardToolbar';
 import WhiteboardHUD from '../components/whiteboard/WhiteboardHUD';
+import TextEditorOverlay from '../components/whiteboard/TextEditorOverlay';
 import ExportDialog from '../components/whiteboard/ExportDialog';
 
 // Utils and Types
@@ -70,6 +71,9 @@ export default function Whiteboard() {
   const [canUndoState, setCanUndoState] = useState(false);
   const [canRedoState, setCanRedoState] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
+  const [pendingTextCreate, setPendingTextCreate] = useState<{ x: number; y: number } | null>(null);
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
+  const [fontSize, setFontSize] = useState(18);
   const [showExportDialog, setShowExportDialog] = useState(false);
 
   // Canvas refs — 3 layers stacked
@@ -84,7 +88,16 @@ export default function Whiteboard() {
   // Yjs State
   const ydocRef = useRef<Y.Doc>(new Y.Doc());
   const yStrokesRef = useRef<Y.Map<Y.Map<any>>>(ydocRef.current.getMap('strokes'));
-  const undoManagerRef = useRef<Y.UndoManager>(new Y.UndoManager(yStrokesRef.current));
+  const yTextsRef = useRef<Y.Map<Y.Map<any>>>(ydocRef.current.getMap('texts'));
+  const undoManagerRef = useRef<Y.UndoManager>(new Y.UndoManager([
+    yStrokesRef.current,
+    yTextsRef.current,
+  ]));
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const editingTextIdRef = useRef<string | null>(null);
+  const selectedTextIdRef = useRef<string | null>(null);
+  const skipNextTextStyleWriteRef = useRef(false);
+  const skipNextTextFontWriteRef = useRef(false);
   
   // Track the ID of the active stroke being drawn
   const activeStrokeId = useRef<string | null>(null);
@@ -110,6 +123,16 @@ export default function Whiteboard() {
   const isPanning = useRef(false);
   const panStart = useRef<{ px: number; py: number; vpx: number; vpy: number } | null>(null);
   const spaceDown = useRef(false);
+  const activeTextTransform = useRef<{
+    id: string;
+    mode: 'move' | 'resize';
+    startWx: number;
+    startWy: number;
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+  } | null>(null);
 
   // Touch (pinch-zoom)
   const lastTouches = useRef<React.Touch[] | null>(null);
@@ -129,6 +152,129 @@ export default function Whiteboard() {
     setCanRedoState(undoManagerRef.current.redoStack.length > 0);
   }, []);
 
+  
+  // Create a new text element in Yjs and return its id
+  function createTextElementAt(worldX: number, worldY: number) {
+    const id = genId();
+    ydocRef.current.transact(() => {
+      const yEl = new Y.Map<any>();
+      yEl.set('id', id);
+      yEl.set('type', 'text');
+      yEl.set('x', worldX);
+      yEl.set('y', worldY);
+      yEl.set('width', 200);
+      yEl.set('height', 80);
+      yEl.set('fontSize', 18);
+      yEl.set('color', '#111410');
+      yEl.set('opacity', 1);
+      const ytext = new Y.Text();
+      yEl.set('content', ytext);
+      yTextsRef.current.set(id, yEl);
+    });
+    markDirty();
+    return id;
+  }
+
+  const createPendingTextBox = useCallback(() => {
+    if (!pendingTextCreate) return;
+    const tid = createTextElementAt(pendingTextCreate.x, pendingTextCreate.y);
+    setSelectedTextId(tid);
+    setEditingTextId(tid);
+    setPendingTextCreate(null);
+  }, [pendingTextCreate]);
+
+  function cssHexToRgb(hex: string): { r: number; g: number; b: number } {
+    const normalized = hex.replace('#', '').trim();
+    const expanded = normalized.length === 3
+      ? normalized.split('').map((ch) => ch + ch).join('')
+      : normalized;
+    const padded = expanded.padEnd(6, '0').slice(0, 6);
+    const int = Number.parseInt(padded, 16);
+    return {
+      r: (int >> 16) & 255,
+      g: (int >> 8) & 255,
+      b: int & 255,
+    };
+  }
+
+  function rgbaFromHex(hex: string, alpha: number): string {
+    const { r, g, b } = cssHexToRgb(hex);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  function getReadableTextColor(hex: string): string {
+    const { r, g, b } = cssHexToRgb(hex);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.62 ? '#111410' : '#FFFFFF';
+  }
+
+  function getTextHitRegion(worldX: number, worldY: number): { id: string; region: 'delete' | 'resize' | 'body' } | null {
+    const scale = Math.max(0.1, vpRef.current.scale);
+    const pad = 2 / scale;
+    const ctrlSize = 18 / scale;
+    const ctrlGap = 3 / scale;
+    const resizeSize = 18 / scale;
+
+    const keys = Array.from(yTextsRef.current.keys()).reverse();
+    for (const k of keys) {
+      const el = yTextsRef.current.get(k);
+      if (!el) continue;
+
+      const ex = el.get('x') as number;
+      const ey = el.get('y') as number;
+      const ew = el.get('width') as number;
+      const eh = el.get('height') as number;
+
+      const ctrlY0 = ey - ctrlSize - ctrlGap;
+      const ctrlY1 = ey - ctrlGap;
+      const deleteX1 = ex + ew - pad;
+      const deleteX0 = deleteX1 - ctrlSize;
+
+      const inDelete =
+        worldX >= deleteX0 && worldX <= deleteX1 &&
+        worldY >= ctrlY0 && worldY <= ctrlY1;
+      if (inDelete) return { id: k, region: 'delete' };
+
+      const inBody = worldX >= ex && worldX <= ex + ew && worldY >= ey && worldY <= ey + eh;
+      if (!inBody) continue;
+
+      const inResize =
+        worldX >= ex + ew - resizeSize && worldX <= ex + ew &&
+        worldY >= ey + eh - resizeSize && worldY <= ey + eh;
+      if (inResize) return { id: k, region: 'resize' };
+
+      return { id: k, region: 'body' };
+    }
+
+    return null;
+  }
+
+  function hitTestTextAt(worldX: number, worldY: number): { id: string; mode: 'move' | 'resize' } | null {
+    const hit = getTextHitRegion(worldX, worldY);
+    if (!hit) return null;
+    if (hit.region === 'delete') return null;
+    return { id: hit.id, mode: hit.region === 'resize' ? 'resize' : 'move' };
+  }
+
+  function hitTestTextControlAt(worldX: number, worldY: number): { id: string; action: 'body' | 'resize' | 'delete' } | null {
+    const hit = getTextHitRegion(worldX, worldY);
+    if (!hit) return null;
+    return { id: hit.id, action: hit.region };
+  }
+
+  function hitTestTextBody(worldX: number, worldY: number): { id: string } | null {
+    const hit = getTextHitRegion(worldX, worldY);
+    if (!hit || hit.region === 'delete') return null;
+    return { id: hit.id };
+  }
+
+  function hitTestTextControlHover(worldX: number, worldY: number): 'delete' | 'resize' | null {
+    const hit = getTextHitRegion(worldX, worldY);
+    if (!hit) return null;
+    if (hit.region === 'delete' || hit.region === 'resize') return hit.region;
+    return null;
+  }
+
   // ── Render loop ─────────────────────────────────────────────────────────────
   const render = useCallback(() => {
     rafRef.current = requestAnimationFrame(render);
@@ -144,17 +290,30 @@ export default function Whiteboard() {
       if (bgCanvas) {
         const bgCtx = bgCanvas.getContext('2d');
         if (bgCtx) {
-          const { bg } = getThemeColors();
+          const { bg, dotColor } = getThemeColors();
           const W = bgCanvas.width;
           const H = bgCanvas.height;
           bgCtx.clearRect(0, 0, W, H);
           bgCtx.fillStyle = bg;
           bgCtx.fillRect(0, 0, W, H);
+
+          // Fixed screen-space grid — not affected by pan or zoom
+          const DOT_SPACING = 28;
+          bgCtx.globalAlpha = 0.3;
+          bgCtx.fillStyle = dotColor;
+          for (let gx = DOT_SPACING / 2; gx < W; gx += DOT_SPACING) {
+            for (let gy = DOT_SPACING / 2; gy < H; gy += DOT_SPACING) {
+              bgCtx.beginPath();
+              bgCtx.arc(gx, gy, 1.5, 0, Math.PI * 2);
+              bgCtx.fill();
+            }
+          }
+          bgCtx.globalAlpha = 1;
         }
       }
     }
 
-    // ── Layer 2: strokes only (transparent background) ──────────────────────
+    // ── Layer 2: strokes + text elements (transparent background) ───────────
     const strokeCanvas = canvasRef.current;
     if (strokeCanvas) {
       const ctx = strokeCanvas.getContext('2d');
@@ -185,6 +344,134 @@ export default function Whiteboard() {
 
         strokes.sort((a, b) => a.timestamp - b.timestamp);
         for (const s of strokes) renderStroke(ctx, s, vp);
+
+        // Render text elements (on top of strokes)
+        yTextsRef.current.forEach((yEl: Y.Map<any>) => {
+          const type = yEl.get('type');
+          if (type !== 'text') return;
+          const isEditingThis = (yEl.get('id') as string) === editingTextIdRef.current;
+          if (isEditingThis) return;
+          const x = yEl.get('x') as number;
+          const y = yEl.get('y') as number;
+          const width = yEl.get('width') as number;
+          const height = yEl.get('height') as number;
+          const fontSize = yEl.get('fontSize') as number;
+          const color = yEl.get('color') as string;
+          const boxOpacity = Math.min(1, Math.max(0, (yEl.get('opacity') as number) ?? 1));
+          const ytext = yEl.get('content') as Y.Text;
+          const text = ytext ? ytext.toString() : '';
+          const isSelected = (yEl.get('id') as string) === selectedTextIdRef.current;
+          const textColor = getReadableTextColor(color);
+
+          ctx.save();
+          ctx.font = `${fontSize * vp.scale}px sans-serif`;
+          const { x: sx, y: sy } = worldToScreen(x, y, vp);
+          const boxW = width * vp.scale;
+          const boxH = height * vp.scale;
+          const lineHeight = fontSize * vp.scale * 1.2;
+          const boxRenderH = Math.max(boxH, lineHeight + 8);
+          const ctrlSizePx = 18;
+          const ctrlGapPx = 3;
+          const ctrlY = sy - ctrlSizePx - ctrlGapPx;
+          ctx.fillStyle = rgbaFromHex(color, boxOpacity);
+          ctx.strokeStyle = isSelected ? '#111410' : color;
+          ctx.lineWidth = Math.max(1.25, (isSelected ? 2.4 : 1.5) * vp.scale);
+          ctx.beginPath();
+          ctx.roundRect(sx, sy, boxW, boxRenderH, 8 * vp.scale);
+          ctx.fill();
+          ctx.stroke();
+
+          const mouse = localMouseScreenRef.current;
+          const inBox = mouse !== null &&
+            mouse.x >= sx && mouse.x <= sx + boxW &&
+            mouse.y >= sy && mouse.y <= sy + boxRenderH;
+          const inCtrlStrip = mouse !== null &&
+            mouse.x >= sx && mouse.x <= sx + boxW &&
+            mouse.y >= ctrlY && mouse.y <= sy;
+          const isHovered = inBox || inCtrlStrip;
+          if (isHovered) {
+            const ctrlPad = 2;
+            const deleteX = sx + boxW - ctrlSizePx - ctrlPad;
+
+            // Delete icon button (tiny red X)
+            ctx.fillStyle = '#d32727';
+            ctx.beginPath();
+            ctx.roundRect(deleteX, ctrlY, ctrlSizePx, ctrlSizePx, 4);
+            ctx.fill();
+
+            ctx.font = 'bold 10px Raleway, sans-serif';
+            ctx.fillStyle = '#ffffff';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('X', deleteX + 4.5, ctrlY + ctrlSizePx / 2);
+
+            ctx.textBaseline = 'top';
+          }
+
+          // Hover controls temporarily change the font; reset before drawing text content.
+          ctx.font = `${fontSize * vp.scale}px sans-serif`;
+          ctx.fillStyle = textColor;
+          ctx.textBaseline = 'top';
+          if (!isEditingThis) {
+            const maxLines = Math.max(1, Math.floor((Math.max(boxH, lineHeight + 8) - 12) / lineHeight));
+            const textX = sx + 6;
+            const textWidth = Math.max(1, boxW - 12);
+            let cursorY = sy + 6;
+            let linesDrawn = 0;
+
+            const paragraphs = text.split('\n');
+            for (const paragraph of paragraphs) {
+              let line = '';
+              for (const ch of paragraph) {
+                const testLine = line + ch;
+                if (ctx.measureText(testLine).width > textWidth && line.length > 0) {
+                  ctx.fillText(line, textX, cursorY);
+                  cursorY += lineHeight;
+                  linesDrawn += 1;
+                  if (linesDrawn >= maxLines) break;
+                  line = ch;
+                } else {
+                  line = testLine;
+                }
+              }
+
+              if (linesDrawn >= maxLines) break;
+
+              ctx.fillText(line, textX, cursorY);
+              cursorY += lineHeight;
+              linesDrawn += 1;
+              if (linesDrawn >= maxLines) break;
+
+              // Preserve blank lines between paragraphs if there is vertical room.
+              if (paragraph === '' && linesDrawn < maxLines) {
+                cursorY += lineHeight;
+                linesDrawn += 1;
+                if (linesDrawn >= maxLines) break;
+              } else {
+                // Account for explicit newline between paragraphs.
+                if (linesDrawn < maxLines) {
+                  cursorY += 0;
+                }
+              }
+            }
+          }
+
+          const handleSizePx = 18;
+          const handleX = sx + boxW - handleSizePx - 2;
+          const handleY = sy + boxRenderH - handleSizePx - 2;
+          ctx.fillStyle = 'rgba(17, 20, 16, 0.84)';
+          ctx.beginPath();
+          ctx.roundRect(handleX, handleY, handleSizePx, handleSizePx, 4);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(handleX + 6, handleY + handleSizePx - 6);
+          ctx.lineTo(handleX + handleSizePx - 4, handleY + 4);
+          ctx.moveTo(handleX + 9, handleY + handleSizePx - 4);
+          ctx.lineTo(handleX + handleSizePx - 4, handleY + 9);
+          ctx.stroke();
+          ctx.restore();
+        });
       }
     }
 
@@ -248,6 +535,67 @@ export default function Whiteboard() {
     rafRef.current = requestAnimationFrame(render);
     return () => cancelAnimationFrame(rafRef.current);
   }, [render]);
+
+  useEffect(() => {
+    editingTextIdRef.current = editingTextId;
+  }, [editingTextId]);
+
+  useEffect(() => {
+    selectedTextIdRef.current = selectedTextId;
+  }, [selectedTextId]);
+
+  useEffect(() => {
+    if (!selectedTextId) return;
+    skipNextTextStyleWriteRef.current = true;
+    skipNextTextFontWriteRef.current = true;
+    const yEl = yTextsRef.current.get(selectedTextId);
+    if (!yEl) return;
+    const boxColor = (yEl.get('color') as string) || '#111410';
+    const boxOpacity = (yEl.get('opacity') as number) ?? 1;
+    const boxFontSize = (yEl.get('fontSize') as number) ?? 18;
+    if (color !== boxColor) setColor(boxColor);
+    if (opacity !== boxOpacity) setOpacity(boxOpacity);
+    if (fontSize !== boxFontSize) setFontSize(boxFontSize);
+  }, [selectedTextId]);
+
+  useEffect(() => {
+    if (!selectedTextId || editingTextIdRef.current === selectedTextId) return;
+    if (skipNextTextStyleWriteRef.current) {
+      skipNextTextStyleWriteRef.current = false;
+      return;
+    }
+    const yEl = yTextsRef.current.get(selectedTextId);
+    if (!yEl) return;
+    const nextColor = color;
+    const nextOpacity = opacity;
+    if (yEl.get('color') === nextColor && (yEl.get('opacity') as number) === nextOpacity) return;
+    ydocRef.current.transact(() => {
+      yEl.set('color', nextColor);
+      yEl.set('opacity', nextOpacity);
+    });
+    markDirty();
+  }, [color, opacity, markDirty, selectedTextId]);
+
+  useEffect(() => {
+    if (!selectedTextId || editingTextIdRef.current === selectedTextId) return;
+    if (skipNextTextFontWriteRef.current) {
+      skipNextTextFontWriteRef.current = false;
+      return;
+    }
+    const yEl = yTextsRef.current.get(selectedTextId);
+    if (!yEl) return;
+    if ((yEl.get('fontSize') as number) === fontSize) return;
+    ydocRef.current.transact(() => {
+      yEl.set('fontSize', fontSize);
+    });
+    markDirty();
+  }, [fontSize, markDirty, selectedTextId]);
+
+  useEffect(() => {
+    if (tool !== 'text' && pendingTextCreate) {
+      setPendingTextCreate(null);
+    }
+  }, [tool, pendingTextCreate]);
 
   // ── Canvas resize ────────────────────────────────────────────────────────────
   useLayoutEffect(() => {
@@ -357,6 +705,7 @@ export default function Whiteboard() {
     // Listen for any deep changes in the CRDT to trigger a re-render
     const observer = () => markDirty();
     yStrokesRef.current.observeDeep(observer);
+    yTextsRef.current.observeDeep(observer);
 
     // Listen for UndoManager changes to update button states
     undoManagerRef.current.on('stack-item-added', syncUndoState);
@@ -364,6 +713,7 @@ export default function Whiteboard() {
 
     return () => {
       yStrokesRef.current.unobserveDeep(observer);
+      yTextsRef.current.unobserveDeep(observer);
     };
   }, [boardId, markDirty, syncUndoState]);
 
@@ -464,6 +814,66 @@ export default function Whiteboard() {
     const vp = vpRef.current;
     const effectiveTool = spaceDown.current ? 'pan' : tool;
 
+    if (e.button === 0) {
+      const { x: wx, y: wy } = screenToWorld(sx, sy, vp);
+      const bodyHit = hitTestTextBody(wx, wy);
+      const controlHit = hitTestTextControlAt(wx, wy);
+      if (controlHit) {
+        setSelectedTextId(controlHit.id);
+        setPendingTextCreate(null);
+
+        if (controlHit.action === 'delete') {
+          ydocRef.current.transact(() => {
+            yTextsRef.current.delete(controlHit.id);
+          });
+          setSelectedTextId((current) => (current === controlHit.id ? null : current));
+          if (editingTextIdRef.current === controlHit.id) {
+            setEditingTextId(null);
+          }
+          markDirty();
+          return;
+        }
+
+        if (controlHit.action === 'resize') {
+          const yEl = yTextsRef.current.get(controlHit.id);
+          if (!yEl) return;
+          activeTextTransform.current = {
+            id: controlHit.id,
+            mode: 'resize',
+            startWx: wx,
+            startWy: wy,
+            startX: yEl.get('x') as number,
+            startY: yEl.get('y') as number,
+            startW: yEl.get('width') as number,
+            startH: yEl.get('height') as number,
+          };
+          return;
+        }
+
+      }
+
+      if (bodyHit && editingTextIdRef.current !== bodyHit.id) {
+        const yEl = yTextsRef.current.get(bodyHit.id);
+        if (yEl) {
+          setSelectedTextId(bodyHit.id);
+          activeTextTransform.current = {
+            id: bodyHit.id,
+            mode: 'move',
+            startWx: wx,
+            startWy: wy,
+            startX: yEl.get('x') as number,
+            startY: yEl.get('y') as number,
+            startW: yEl.get('width') as number,
+            startH: yEl.get('height') as number,
+          };
+          setPendingTextCreate(null);
+          return;
+        }
+      }
+
+      setSelectedTextId(null);
+    }
+
     if (effectiveTool === 'pan' || e.button === 1 || e.button === 2) {
       isPanning.current = true;
       panStart.current = { px: sx, py: sy, vpx: vp.x, vpy: vp.y };
@@ -472,9 +882,41 @@ export default function Whiteboard() {
 
     if (e.button !== 0) return;
 
-    isDrawing.current = true;
     
     const { x: wx, y: wy } = screenToWorld(sx, sy, vp);
+
+    // If text tool, create a text element and open editor, then return
+    if (effectiveTool === 'text') {
+      const hit = hitTestTextAt(wx, wy);
+      if (hit) {
+        setSelectedTextId(hit.id);
+        setPendingTextCreate(null);
+        const yEl = yTextsRef.current.get(hit.id);
+        if (!yEl) return;
+        activeTextTransform.current = {
+          id: hit.id,
+          mode: hit.mode,
+          startWx: wx,
+          startWy: wy,
+          startX: yEl.get('x') as number,
+          startY: yEl.get('y') as number,
+          startW: yEl.get('width') as number,
+          startH: yEl.get('height') as number,
+        };
+        return;
+      }
+
+      setPendingTextCreate({ x: wx, y: wy });
+      // do not start a stroke
+      return;
+    }
+
+    if (pendingTextCreate) {
+      setPendingTextCreate(null);
+    }
+
+    // Start drawing a stroke
+    isDrawing.current = true;
 
     // Create the stroke in Yjs
     const sid = genId();
@@ -501,7 +943,7 @@ export default function Whiteboard() {
       yStrokesRef.current.set(sid, yStroke);
     });
 
-  }, [tool, color, lineWidth, opacity, getCanvasPos]);
+  }, [tool, color, lineWidth, opacity, getCanvasPos, pendingTextCreate]);
 
   // ── Pointer move ──────────────────────────────────────────────────────────────
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -509,6 +951,19 @@ export default function Whiteboard() {
 
     // Track local mouse screen position for cursor label proximity detection
     localMouseScreenRef.current = { x: sx, y: sy };
+    markDirty();
+
+    const hoverWorld = screenToWorld(sx, sy, vpRef.current);
+    const hoverControl = hitTestTextControlHover(hoverWorld.x, hoverWorld.y);
+    if (canvasRef.current) {
+      if (hoverControl) {
+        canvasRef.current.style.cursor = 'pointer';
+      } else if (spaceDown.current) {
+        canvasRef.current.style.cursor = isPanning.current ? 'grabbing' : 'grab';
+      } else {
+        canvasRef.current.style.cursor = getCursor(tool);
+      }
+    }
 
     // Re-render when mouse enters or leaves the cursor's hover area so the label snaps on/off
     const vp = vpRef.current;
@@ -538,6 +993,25 @@ export default function Whiteboard() {
       return;
     }
 
+    if (activeTextTransform.current) {
+      const { x: wx, y: wy } = screenToWorld(sx, sy, vpRef.current);
+      const active = activeTextTransform.current;
+      const yEl = yTextsRef.current.get(active.id);
+      if (!yEl) return;
+
+      ydocRef.current.transact(() => {
+        if (active.mode === 'move') {
+          yEl.set('x', active.startX + (wx - active.startWx));
+          yEl.set('y', active.startY + (wy - active.startWy));
+        } else {
+          yEl.set('width', Math.max(80, active.startW + (wx - active.startWx)));
+          yEl.set('height', Math.max(48, active.startH + (wy - active.startWy)));
+        }
+      });
+      markDirty();
+      return;
+    }
+
     if (!isDrawing.current || !activeStrokeId.current) return;
 
     const { x: wx, y: wy } = screenToWorld(sx, sy, vpRef.current);
@@ -555,14 +1029,20 @@ export default function Whiteboard() {
       yStroke.set('y1', wy);
     }
 
-  }, [getCanvasPos, markDirty]);
+  }, [getCanvasPos, markDirty, tool]);
 
   // ── Pointer up ────────────────────────────────────────────────────────────────
   const onPointerUp = useCallback((_e: React.PointerEvent<HTMLCanvasElement>) => {
     localMouseScreenRef.current = null;
+    markDirty();
     if (isPanning.current) {
       isPanning.current = false;
       panStart.current = null;
+      return;
+    }
+
+    if (activeTextTransform.current) {
+      activeTextTransform.current = null;
       return;
     }
 
@@ -570,7 +1050,29 @@ export default function Whiteboard() {
     isDrawing.current = false;
     activeStrokeId.current = null;
 
-  }, []);
+  }, [markDirty]);
+
+  // Double-click toggles edit mode for the clicked text box.
+  const onCanvasDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const { sx, sy } = getCanvasPos(e.nativeEvent as unknown as PointerEvent);
+    const { x: wx, y: wy } = screenToWorld(sx, sy, vpRef.current);
+
+    const hit = hitTestTextAt(wx, wy);
+    if (hit) {
+      setSelectedTextId(hit.id);
+      setEditingTextId((current) => {
+        const next = current === hit.id ? null : hit.id;
+        editingTextIdRef.current = next;
+        return next;
+      });
+      markDirty();
+      return;
+    }
+
+    editingTextIdRef.current = null;
+    setEditingTextId(null);
+    markDirty();
+  }, [getCanvasPos, markDirty]);
 
   // ── Wheel zoom ────────────────────────────────────────────────────────────────
   const onWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
@@ -657,6 +1159,7 @@ export default function Whiteboard() {
       if (e.key === 'v' || e.key === 'V') setTool('pan');
       if (e.key === 'p' || e.key === 'P') setTool('pen');
       if (e.key === 'e' || e.key === 'E') setTool('eraser');
+      if (e.key === 't' || e.key === 'T') setTool('text');
       if (e.key === 'l' || e.key === 'L') setTool('line');
       if (e.key === 'r' || e.key === 'R') setTool('rect');
       if (e.key === 'o' || e.key === 'O') setTool('circle');
@@ -694,7 +1197,12 @@ export default function Whiteboard() {
         // Collect all keys then delete them individually to properly log actions in Yjs
         const keys = Array.from(yStrokesRef.current.keys());
         keys.forEach(key => yStrokesRef.current.delete(key));
+
+        const textKeys = Array.from(yTextsRef.current.keys());
+        textKeys.forEach(key => yTextsRef.current.delete(key));
     });
+    setPendingTextCreate(null);
+    setSelectedTextId(null);
     markDirty();
   }, [markDirty]);
 
@@ -1039,6 +1547,7 @@ export default function Whiteboard() {
   function getCursor(t: Tool): string {
     if (t === 'pan') return 'grab';
     if (t === 'eraser') return 'cell';
+    if (t === 'text') return 'text';
     return ARROW_CURSOR;
   }
 
@@ -1107,6 +1616,9 @@ export default function Whiteboard() {
           setLineWidth={setLineWidth}
           opacity={opacity}
           setOpacity={setOpacity}
+          fontSize={fontSize}
+          setFontSize={setFontSize}
+          hasTextSelection={selectedTextId !== null}
           zoomPct={zoomPct}
           zoomAt={zoomAt}
           fitToScreen={fitToScreen}
@@ -1122,7 +1634,7 @@ export default function Whiteboard() {
           {/* Layer 1: background + dot grid */}
           <canvas ref={bgCanvasRef} className="absolute inset-0" style={{ zIndex: 0 }} />
 
-          {/* Layer 2: strokes — transparent, receives all pointer events */}
+          {/* Layer 2: strokes + text elements — transparent, receives all pointer events */}
           <canvas
             ref={canvasRef}
             className="absolute inset-0"
@@ -1141,6 +1653,7 @@ export default function Whiteboard() {
             onTouchStart={onTouchStart}
             onTouchEnd={onTouchEnd}
             onContextMenu={e => e.preventDefault()}
+            onDoubleClick={onCanvasDoubleClick}
           />
 
           {/* Layer 3: remote cursors — pointer-events disabled so clicks pass through */}
@@ -1149,6 +1662,38 @@ export default function Whiteboard() {
             className="absolute inset-0"
             style={{ zIndex: 2, pointerEvents: 'none' }}
           />
+
+          <TextEditorOverlay
+            yElement={ editingTextId ? (yTextsRef.current.get(editingTextId) as Y.Map<any>) : null }
+            worldToScreen={worldToScreen}
+            vp={vpRef.current}
+            onClose={() => {
+              editingTextIdRef.current = null;
+              setEditingTextId(null);
+              markDirty();
+            }}
+          />
+
+          {pendingTextCreate && tool === 'text' && (() => {
+            const anchor = worldToScreen(pendingTextCreate.x, pendingTextCreate.y, vpRef.current);
+            return (
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  createPendingTextBox();
+                }}
+                className="absolute z-40 rounded-full border border-[#2D3A27]/30 bg-[#F8F6F0] px-3 py-1 text-[11px] font-semibold text-[#2D3A27] shadow-md hover:bg-[#EAE5D7]"
+                style={{
+                  left: Math.round(anchor.x),
+                  top: Math.round(anchor.y - 34),
+                }}
+              >
+                Create text box here
+              </button>
+            );
+          })()}
 
           <WhiteboardHUD tool={tool} />
         </div>

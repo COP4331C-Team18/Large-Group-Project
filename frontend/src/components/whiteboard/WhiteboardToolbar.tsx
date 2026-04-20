@@ -88,6 +88,7 @@ const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
       <ToolBtn id="line"   icon={<Minus size={16} />}   label="Line"  shortcut="L" currentTool={tool} setTool={setTool} />
       <ToolBtn id="rect"   icon={<Square size={16} />}  label="Rect"  shortcut="R" currentTool={tool} setTool={setTool} />
       <ToolBtn id="circle" icon={<Circle size={16} />}  label="Oval"  shortcut="O" currentTool={tool} setTool={setTool} />
+      <ToolBtn id="text"   icon={<span style={{ fontWeight: 700, fontSize: 14 }}>T</span>}  label="Text"  shortcut="T"  currentTool={tool}  setTool={setTool}/>
 
       <div className="w-8 h-px mt-1 bg-secondary/20" />
 
