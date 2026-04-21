@@ -3,6 +3,7 @@ import '../theme/app_colors.dart';
 import '../widgets/dotted_background.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
+import '../dialogs/join_board_dialog.dart';
 
 class AuthChoiceScreen extends StatelessWidget {
   const AuthChoiceScreen({super.key});
@@ -15,19 +16,32 @@ class AuthChoiceScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         automaticallyImplyLeading: false,
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset('assets/logo.png', height: 70),
+            const SizedBox(width: 8),
+            Text(
+              'InkBoard',
+              style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
       body: DottedBackground(
         child: SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 28.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 16),
-                _buildHeader(),
-                const SizedBox(height: 48),
+                _buildHeader(context),
+                const SizedBox(height: 36),
                 _buildOptions(context),
-                const Spacer(),
+                const SizedBox(height: 48),
               ],
             ),
           ),
@@ -36,28 +50,35 @@ class AuthChoiceScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader() {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildHeader(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        Image.asset('assets/choice-icon.png', height: 275),
         Text(
-          'Welcome!',
-          style: TextStyle(
-            fontSize: 36,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-            height: 1.2,
-            letterSpacing: -0.5,
-          ),
+          'Where ideas',
+          style: Theme.of(context).textTheme.headlineMedium
         ),
-        SizedBox(height: 12),
-        Text(
-          'Create a new account or sign in\nto an existing one.',
-          style: TextStyle(
-            fontSize: 15,
-            color: AppColors.textMuted,
-            height: 1.5,
-          ),
+        SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'flow like',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontStyle: FontStyle.italic,
+                fontWeight: FontWeight.w600,
+                color: AppColors.accent,
+                letterSpacing: 1.5,
+              ),
+            ),
+            Text(
+              ' ink.',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                letterSpacing: 1.5,
+              ), 
+            ),
+          ],
         ),
       ],
     );
@@ -85,6 +106,15 @@ class AuthChoiceScreen extends StatelessWidget {
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const LoginScreen()),
           ),
+        ),
+
+        const SizedBox(height: 16),
+
+        _ChoiceCard(
+          icon: Icons.numbers_outlined,
+          title: 'Enter room code',
+          subtitle: 'Have a room code ready to use? Join now.',
+          onTap: () => showJoinBoardDialog(context)
         ),
       ],
     );

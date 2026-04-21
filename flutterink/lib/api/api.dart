@@ -13,7 +13,8 @@ class Api {
   // Run with: flutter run --dart-define=API_BASE_URL=https://api.yourdomain.com
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:5001/api',
+    defaultValue: 'http://10.0.2.2:5000/api',
+    // defaultValue: 'https://inkboard.xyz/api',
   );
 
   Api._(this._dio);

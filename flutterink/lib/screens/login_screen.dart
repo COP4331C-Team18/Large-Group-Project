@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutterink/screens/auth_choice_screen.dart';
+import 'package:flutterink/screens/dashboard_screen.dart';
 import '../api/user_service.dart';
 import '../models/user.dart';
 import '../services/prefs_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/dotted_background.dart';
-import 'enter_code_screen.dart';
-import 'home_screen.dart';
 import '../utils/routes.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -50,7 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => HomeScreen(user: user)),
+        MaterialPageRoute(builder: (_) => const DashboardScreen()),
         (_) => false,
       );
     } catch (e) {
@@ -73,7 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
         leading: BackButton(
           color: AppColors.accent,
           onPressed: () => Navigator.of(context).pushReplacement(
-            slideBackRoute(const EnterCodeScreen()),
+            slideBackRoute(const AuthChoiceScreen()),
           ),
         ),
       ),
@@ -82,9 +82,9 @@ class _LoginScreenState extends State<LoginScreen> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 28.0),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(height: 16),
                 _buildHeader(),
                 const SizedBox(height: 36),
                 _buildForm(),
@@ -96,28 +96,25 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildHeader() {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildHeader(){
+    return Column(
       children: [
-        Text(
-          'Welcome Back!',
-          style: TextStyle(
-            fontSize: 36,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-            height: 1.2,
-            letterSpacing: -0.5,
+          Image.asset("assets/login-icon.png", height: 225), 
+          SizedBox(height: 12),
+          Text(
+            "WELCOME BACK",
+            textAlign: TextAlign.center, 
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontFamily: 'Raleway',
+              fontWeight: FontWeight.w800,
+              letterSpacing: 2.5,
+              color: AppColors.accent,
+            ),
           ),
-        ),
-        SizedBox(height: 12),
-        Text(
-          'Sign in to your InkBoard account.',
-          style: TextStyle(fontSize: 15, color: AppColors.textMuted),
-        ),
       ],
-    );
+    );    
   }
+
 
   Widget _buildForm() {
     return Form(
