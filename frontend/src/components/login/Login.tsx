@@ -40,7 +40,7 @@ export default function Login() {
       await authService.requestPasswordReset(resetEmail); 
       setMessage("If that email exists, a link is on the way.");
     } catch (error: any) {
-      setMessage("Error requesting reset.");
+      setMessage("Please enter an email");
     }
   };
 
@@ -55,7 +55,8 @@ export default function Login() {
           </div>
           <input
             type="email" placeholder="Email Address" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)}
-              className="w-full px-4 py-[0.7rem]
+              className="
+              w-full px-4 py-[0.7rem]
               font-sans text-[0.93rem] text-base-content
               bg-base-100 border border-primary/70 rounded-[3px]
               placeholder:text-base-content/60        
@@ -117,46 +118,42 @@ export default function Login() {
           />
         </div>
 
-        {/* Google OAuth button */}
-        <div className="mt-4 flex justify-center w-full">
-          <OAuth />
+        <div className="text-error text-sm min-h-[16px] my-2 text-center p-[2px]">
+          {message}
         </div>
-
-        {message && (
-          <p className="font-sans text-[0.84rem] text-red-700 text-center -mt-1">
-            {message}
-          </p>
-        )}
 
         <button className="btn w-full bg-primary/90 text-primary-content hover:bg-primary border-none rounded-[3px] font-sans text-[0.76rem] font-semibold tracking-[0.1em] uppercase" onClick={doLogin}>
           Sign In
         </button>
 
-        <p className="font-sans text-[0.84rem] text-base-content/70 text-center">
+        {/* Google OAuth button */}
+        <div className="mt-4 flex justify-center">
+            <OAuth />
+        </div>
+
+        <p className="font-sans text-[0.84rem] text-base-content text-center mt-[10px] pt-1">
           Don't have an account?{' '}
           <button
             onClick={() => navigate('/signup')}
             className="
-              text-primary font-semibold
-              border-b border-[rgba(74,90,58,0.3)] pb-px
+              text-primary/70 font-semibold
+              border-b border-primary/90 pb-px
               hover:border-primary transition-colors duration-150
-              bg-transparent border-x-0 border-t-0 cursor-pointer p-0
-            "
+              bg-transparent border-x-0 border-t-0 cursor-pointer p-0"
           >
             Create one free
           </button>
         </p>
 
-        <p className="font-sans text-[0.84rem] text-base-content/70 text-center">
+        <p className="font-sans text-[0.84rem] text-base-content text-center mt-[10px] pt-1">
           Forgot your password?{' '}
           <button
-            onClick={() => setIsForgotMode(true)}
+            onClick={() => {setIsForgotMode(true); setMessage("")}}
             className="
-              text-primary font-semibold
-              border-b border-[rgba(74,90,58,0.3)] pb-px
+              text-primary/70 font-semibold
+              border-b border-primary/90 pb-px
               hover:border-primary transition-colors duration-150
-              bg-transparent border-x-0 border-t-0 cursor-pointer p-0
-            "
+              bg-transparent border-x-0 border-t-0 cursor-pointer p-0"
           >
             Click here
           </button>
