@@ -12,11 +12,12 @@ export default function JoinBoard() {
 
   useEffect(() => {
     if (!code) return;
-    boardService.joinBoardByCode(code)
+    const upperCode = code.toUpperCase();
+    boardService.joinBoardByCode(upperCode)
       .then(data => {
         const boardId = data._id || data.id;
         if (!boardId) { setError('Invalid room code'); return; }
-        navigate(`/board/${boardId}?collab=${code}`, { replace: true });
+        navigate(`/board/${boardId}?collab=${upperCode}`, { replace: true });
       })
       .catch(() => setError('Invalid room code or server error'));
   }, [code, navigate]);

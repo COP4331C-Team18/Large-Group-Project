@@ -45,8 +45,6 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text,
       );
 
-      print(user.toJson()); // For debugging purposes
-
       await PrefsService.markLoggedIn();
 
       if (!mounted) return;

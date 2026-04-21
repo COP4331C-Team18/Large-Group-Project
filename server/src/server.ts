@@ -1,56 +1,14 @@
 // server.ts
 import 'dotenv/config';
 
-import express from 'express';
-import cors from 'cors';
 import http from 'http';
-import cookieParser from 'cookie-parser';
 import { Server } from 'socket.io';
-
-import rateLimiter from './middleware/rateLimiter.js';
-import connectDB from './config/db.js';
-
-// Routes
-import authRoutes from './routers/authRoutes.js';
-import userRoutes from './routers/userRoutes.js';
-import boardRoutes from './routers/boardRoutes.js';
-
-// Models
-import Stroke from './models/Stroke.js';
-import Board from './models/Board.js';
-
-const app = express(); 
-
-// ── Security Headers & COOP ──────────────────────────────────────────────────
-app.use((req, res, next) => {
-  // Fixes the window.postMessage error for Google Login
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
-  // Optional: Helps with Cross-Origin resource sharing in some browsers
-  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none'); 
-  next();
-});
-
-// Update your CORS options to include your production domain
-const corsOptions = {
-    origin: ['http://localhost:5173', 'https://inkboard.xyz'], 
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization']
-};
-
-// ── Express Middleware ────────────────────────────────────────────────────────
-app.use(cors(corsOptions));
-app.use(express.json({ limit: '10mb' })); // Kept 10mb limit for large canvas snapshots
-app.use(cookieParser());
-app.use(rateLimiter);
+import connectDB from './config/db';
+import Stroke from './models/Stroke';
+import Board from './models/Board';
+import app from './app';
 
 connectDB();
-
-// ── Routes ────────────────────────────────────────────────────────────────────
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/boards', boardRoutes);
-
 const server = http.createServer(app);
 
 // ── Socket.IO Setup ───────────────────────────────────────────────────────────

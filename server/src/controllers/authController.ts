@@ -1,12 +1,13 @@
 import { OAuth2Client } from "google-auth-library";
-import User from "../models/User.js";
-import { signAccessToken } from "../utils/jwtUtils.js";
-import { HTTPStatusCodes } from "../utils/statusCodes.js";
+import User from "../models/User";
+import { signAccessToken } from "../utils/jwtUtils";
+import { HTTPStatusCodes } from "../utils/statusCodes";
 import { Request, Response } from "express";
 import * as postmark from "postmark";
+import crypto from 'crypto';
 
 const MIN_PASSWORD_LENGTH = 10;
-const JWT_EXPIRATION = "1h";
+const JWT_EXPIRATION = "20m";
 
 // Generate 6-digit verification code
 function generateVerificationCode() {
@@ -108,7 +109,7 @@ export async function login(req: Request, res: Response) {
       httpOnly: true,
       secure: isProd,                 // only true in production
       sameSite: isProd ? "none" : "lax",   // lax for localhost
-      maxAge: 60 * 60 * 1000
+      maxAge: 20 * 60 * 1000  // 20 minutes
     });
 
     return res.status(HTTPStatusCodes.OK).json({
@@ -268,7 +269,7 @@ export async function verifyEmail(req: Request, res: Response) {
       httpOnly: true,
       secure: isProd,                 // only true in production
       sameSite: isProd ? "none" : "lax",   // lax for localhost
-      maxAge: 60 * 60 * 1000
+      maxAge: 20 * 60 * 1000 // 20 minutes
     });
 
     return res.status(HTTPStatusCodes.OK).json({
@@ -348,7 +349,7 @@ export async function googleOAuth(req: Request, res: Response) {
       httpOnly: true,
       secure: isProd,                 // only true in production
       sameSite: isProd ? "none" : "lax",   // lax for localhost
-      maxAge: 60 * 60 * 1000
+      maxAge: 20 * 60 * 1000 // 20 minutes
     });
 
     return res.status(HTTPStatusCodes.OK).json({
@@ -427,7 +428,8 @@ export async function getCurrentUser(req: Request, res: Response) {
     user: {
       id: user._id,
       username: user.username,
-      email: user.email
+      email: user.email,
+      avatarId: user.avatarId ?? "default",
     }
   });
 }
@@ -442,4 +444,109 @@ export function logout(req: Request, res: Response) {
     path: "/",
   });
   return res.status(200).json({ message: "Logged out" });
+}
+
+// POST /api/auth/forgot-password
+export async function forgotPassword(req: Request, res: Response) {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "Missing email" });
+
+  try {
+    const user = await User.findOne({ email });
+
+    // always returns success even when emaild not found
+    if (!user) {
+      return res.status(200).json({ message: "If that email exists, a reset link has been sent." });
+    }
+    // generate a secure random token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    
+    // save it to the user with a 15 min expiry
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
+    await user.save();
+
+    // send the email with the link
+    const resetLink = `${process.env.CLIENT_URL}/reset-password?token=${resetToken}&email=${email}`;
+    await sendResetEmail(email, resetLink);
+
+    return res.status(200).json({ message: "If that email exists, a reset link has been sent." });
+  } catch (err) {
+    return res.status(500).json({ error: "Server error" });
+  }
+}
+
+// POST /api/auth/reset-password
+export async function resetPassword(req: Request, res: Response) {
+  const { email, token, newPassword } = req.body;
+
+  if (!email || !token || !newPassword) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  if (newPassword.length < 10) {
+    return res.status(400).json({ error: "Password must be at least 10 characters" });
+  }
+
+  try {
+    const user = await User.findOne({ email });
+
+    if (!user || user.resetPasswordToken !== token) {
+      return res.status(400).json({ error: "Invalid or expired reset link" });
+    }
+
+    if (!user.resetPasswordExpires || user.resetPasswordExpires < new Date()) {
+      return res.status(400).json({ error: "Reset link has expired" });
+    }
+
+    // update the password
+    user.password = newPassword;
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+    await user.save();
+
+    return res.status(200).json({ message: "Password reset successful" });
+  } catch (err) {
+    return res.status(500).json({ error: "Server error" });
+  }
+}
+
+export async function sendResetEmail(email: string, resetLink: string) {
+  const apiKey = process.env.POSTMARK_API_KEY;
+  const fromAddress = process.env.POSTMARK_FROM_EMAIL;
+
+  if (!apiKey || !fromAddress) {
+    throw new Error("POSTMARK_API_KEY or POSTMARK_FROM_EMAIL is not configured in .env");
+  }
+
+  const client = new postmark.ServerClient(apiKey);
+
+  await client.sendEmail({
+    From: `InkBoard <${fromAddress}>`,
+    To: email,
+    Subject: "Reset your InkBoard password",
+    TextBody: `You requested a password reset for your InkBoard account.\n\nClick the link below to reset your password. It expires in 15 minutes.\n\n${resetLink}\n\nIf you did not request a password reset, you can safely ignore this email.`,
+    HtmlBody: `
+      <div style="font-family: 'Raleway', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #ede8df; border-radius: 4px;">
+        <h2 style="font-family: 'Lora', Georgia, serif; color: #111410; margin-bottom: 8px;">Reset your InkBoard password</h2>
+        <p style="color: #9e8268; margin-bottom: 24px;">Click the button below to reset your password. It expires in <strong>15 minutes</strong>.</p>
+        <div style="margin-bottom: 24px;">
+          <a href="${resetLink}" style="
+            display: inline-block;
+            padding: 14px 28px;
+            background: #f7f2e8;
+            border: 1px solid rgba(74,90,58,0.28);
+            border-radius: 3px;
+            font-family: 'Lora', Georgia, serif;
+            font-size: 16px;
+            font-weight: 600;
+            color: #2a2d2e;
+            text-decoration: none;
+          ">Reset Password</a>
+        </div>
+        <p style="color: #9e8268; font-size: 13px;">If you did not request a password reset, you can safely ignore this email.</p>
+      </div>
+    `,
+    MessageStream: "outbound",
+  });
 }

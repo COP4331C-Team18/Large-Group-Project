@@ -1,7 +1,12 @@
 import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
+import User from '../models/User';
 import { Request, Response, NextFunction } from 'express';
-import { asyncHandler } from '../utils/asyncHandler.js';
+import { asyncHandler } from '../utils/asyncHandler';
+
+
+export interface AuthRequest extends Request {
+  user?: any;
+}
 
 
 interface JwtPayload {
@@ -24,7 +29,7 @@ export const protect = asyncHandler(async (req: Request, res: Response, next: Ne
 
             // 3. Admin logic (unchanged)
             if(!decoded.id || !decoded.username) {
-                res.status(401).json({
+                return res.status(401).json({
                     authenticated: false,
                     message: 'Not authorized, invalid token payload'
                 });
@@ -34,18 +39,35 @@ export const protect = asyncHandler(async (req: Request, res: Response, next: Ne
             const user = await User.findById(decoded.id).select('-password');
 
             if (!user) {
-                res.status(401).json({
+                return res.status(401).json({
                     authenticated: false,
                     message: 'User no longer exists'
                 });
             }
 
+
+            // issuing a new token and cookie with updated expiry (another 20 mins a sliding window) on every authenticated request for a protected route            
+            // 3. Issue a NEW token (sliding session window)
+            const newToken = jwt.sign(
+                { id: user._id, username: user.username },
+                process.env.JWT_SECRET as string,
+                { expiresIn: "20m" }
+            );
+
+            const isProd = process.env.PRODUCTION === "true";
+            res.cookie("token", newToken, {
+              httpOnly: true,
+              secure: isProd,
+              sameSite: isProd ? "none" : "lax",
+              maxAge: 20 * 60 * 1000,
+            });
+            
             (req as any).user = user;            
             next();
         } catch (error) {
             // Print the error for debugging but still send a generic message to the client
             console.error(`JWT VERIFICATION ERROR: ${error}`);
-            res.status(401).json({
+            return res.status(401).json({
                 authenticated: false,
                 message: 'Not authorized, token failed'
             });
@@ -53,7 +75,7 @@ export const protect = asyncHandler(async (req: Request, res: Response, next: Ne
     } else {
         // 5. If no cookie is found: 
         // We send the 401 but DO NOT throw an Error to avoid terminal spam.
-        res.status(401).json({ 
+        return res.status(401).json({ 
             authenticated: false,
             message: 'Not authorized, token failed or expired' 
         });

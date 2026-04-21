@@ -6,15 +6,6 @@ import mongoose, { Document, Schema, Types } from "mongoose";
  * - createdAt/updatedAt are provided via { timestamps: true }.
  */
 
-export interface BoardRevision {
-	/** A full Yjs document state (snapshot) OR an aggregated update you can apply to a fresh doc. */
-	yjsUpdate: Buffer;
-	/** User that authored the change that produced this revision (stroke). */
-	userId: Types.ObjectId;
-	/** When this revision was saved. */
-	savedAt: Date;
-}
-
 export interface BoardDocument extends Document {
 	/** Convenience alias for MongoDB's _id (string). */
 	boardId?: string;
@@ -33,18 +24,7 @@ export interface BoardDocument extends Document {
 	thumbnail?: string | null;
 	/** Simple user-defined tags. */
 	tags: string[];
-	/** Simple revision history as stored snapshots/aggregated updates. */
-	revisions: BoardRevision[];
 }
-
-const boardRevisionSchema = new Schema<BoardRevision>(
-	{
-		yjsUpdate: { type: Buffer, required: true },
-		userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-		savedAt: { type: Date, default: Date.now },
-	},
-	{ _id: false }
-);
 
 const boardSchema = new Schema<BoardDocument>(
 	{
@@ -96,28 +76,20 @@ const boardSchema = new Schema<BoardDocument>(
 				message: "tags must be an array of strings",
 			},
 		},
-		revisions: {
-			type: [boardRevisionSchema],
-			default: [],
-			validate: {
-				validator: (arr: BoardRevision[]) => Array.isArray(arr) && arr.length <= 100,
-				message: "revisions exceeds max length of 100",
-			},
-		},
 	},
-	{ timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
+	{
+		timestamps: true,
+		toJSON: {
+			virtuals: true,
+			transform: (_doc, ret) => { delete ret.yjsUpdate; return ret; },
+		},
+		toObject: { virtuals: true },
+	}
 );
 
 // Explicit board id field for clients. MongoDB already stores this as _id.
 boardSchema.virtual("boardId").get(function (this: BoardDocument) {
 	return this._id?.toString();
-});
-
-// Hard cap revision history to last 100 entries.
-boardSchema.pre<BoardDocument>("save", function () {
-	if (Array.isArray(this.revisions) && this.revisions.length > 100) {
-		this.revisions = this.revisions.slice(-100);
-	}
 });
 
 boardSchema.index({ updatedAt: -1 });

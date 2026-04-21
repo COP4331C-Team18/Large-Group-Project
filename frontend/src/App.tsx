@@ -8,6 +8,7 @@ import JoinBoard from '@/pages/JoinBoard';
 import Whiteboard from '@/pages/Whiteboard';
 import ProfilePage from '@/pages/ProfilePage';
 import SettingsPage from '@/pages/SettingsPage';
+import ForgetPassword from '@/pages/ForgetPasswordPage';
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/reset-password" element={<ForgetPassword />} />
 
         {/* Public: resolves a join code and redirects to /board/:id?collab=CODE */}
         <Route path="/join/:code" element={<JoinBoard />} />

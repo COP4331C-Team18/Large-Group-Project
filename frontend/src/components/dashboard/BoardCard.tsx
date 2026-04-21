@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useRef } from "react";
 import { motion } from "framer-motion";
+import { useBoardPreview } from "@/hooks/useBoardPreview";
 
 export interface InkBoardCardProps {
   id?: number | string;
@@ -16,6 +17,9 @@ const InkBoardCard: React.FC<InkBoardCardProps> = ({
   snapshot,
   onClick,
 }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null!);
+  useBoardPreview(snapshot ? undefined : id, canvasRef);
+
   return (
     <motion.div
       layoutId={id ? String(id) : undefined}
@@ -27,21 +31,24 @@ const InkBoardCard: React.FC<InkBoardCardProps> = ({
         hover:-translate-y-0.5
         hover:shadow-[0_6px_20px_rgba(44,44,36,0.13)]
         hover:border-primary/80
-        before:absolute before:inset-0 before:rounded-[14px]
-        before:bg-gradient-to-br before:from-white/35 before:to-transparent
-        before:pointer-events-none
         font-serif
       "
     >
       <div
         className="
-          relative mb-[0.85rem] overflow-hidden  aspect-video
-          rounded-lg bg-base-300
+          relative mb-[0.85rem] overflow-hidden aspect-video
+          rounded-lg bg-[#F8F6F0]
           px-3 py-3">
         {snapshot ? (
           <img src={snapshot} alt={`Snapshot of ${title} (ID: ${id})`} className="w-full h-full object-cover rounded-lg" />
         ) : (
-          "PREVIEW HERE"
+          <canvas
+            ref={canvasRef}
+            className="w-full h-full"
+            width={320}
+            height={180}
+            style={{ background: '#F8F6F0' }}
+          />
         )}
       </div>
 

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import Board from '../models/Board.js'; // Make sure you saved the Board.ts model we updated earlier!
-import { AuthRequest } from '../middleware/authMiddleware.js';
-import { HTTPStatusCodes } from '../utils/statusCodes.js';
+import Board from '../models/Board'; // Make sure you saved the Board.ts model we updated earlier!
+import { AuthRequest } from '../middleware/jwtProtect';
+import { HTTPStatusCodes } from '../utils/statusCodes';
 
 // GET /api/boards
 // PROTECTED: Fetches only the boards owned by the logged-in user
@@ -64,17 +64,18 @@ export const setBoardJoinCode = async (req: AuthRequest, res: Response) => {
 // PUBLIC: Fetches a single board using its 6-digit access code
 export const joinBoardByCode = async (req: Request, res: Response) => {
   try {
-    const { code } = req.params;
-    
-    // Find the board with this exact 6-digit code
-    const board = await Board.findOne({ joinCode: code });
+    const code = Array.isArray(req.params.code) ? req.params.code[0] : req.params.code;
+
+    // Find the board with this exact 6-digit code (normalise to uppercase to match stored format)
+    const board = await Board.findOne({ joinCode: code.toUpperCase() });
     
     if (!board) {
       return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: 'Invalid room code.' });
     }
 
-    // Success! Return the board data (which includes the board._id we need for Socket.io)
-    return res.status(HTTPStatusCodes.OK).json(board);
+    // Include yjsUpdate for whiteboard hydration (stripped by default toJSON transform)
+    const data = board.toObject({ virtuals: true });
+    return res.status(HTTPStatusCodes.OK).json({ ...data, yjsUpdate: board.yjsUpdate });
   } catch (err) {
     console.error("Error joining board:", err);
     return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Server error joining board' });
@@ -97,7 +98,9 @@ export const getBoardById = async (req: AuthRequest, res: Response) => {
       return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: 'Board not found or unauthorized' });
     }
 
-    return res.status(HTTPStatusCodes.OK).json(board);
+    // Include yjsUpdate for whiteboard hydration (stripped by default toJSON transform)
+    const data = board.toObject({ virtuals: true });
+    return res.status(HTTPStatusCodes.OK).json({ ...data, yjsUpdate: board.yjsUpdate });
   } catch (err) {
     console.error("Error fetching board by ID:", err);
     return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Server error fetching board' });
@@ -172,6 +175,43 @@ export const updateBoard = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// PUT /api/boards/:id/yjs
+// PROTECTED: Saves the full Yjs document state from the browser (replaces existing snapshot)
+export const saveYjsStateFromBrowser = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(HTTPStatusCodes.UNAUTHORIZED).json({ error: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    const incomingBuffer = req.body;
+
+    if (!Buffer.isBuffer(incomingBuffer) || incomingBuffer.length === 0) {
+      return res.status(HTTPStatusCodes.BAD_REQUEST).json({ error: 'Invalid or empty body' });
+    }
+
+    const board = await Board.findOne({ _id: id, owner: userId });
+    if (!board) {
+      return res.status(HTTPStatusCodes.NOT_FOUND).json({ error: 'Board not found or unauthorized' });
+    }
+
+    // Wrap the raw Yjs snapshot in inksubserver's framing format:
+    // [4-byte big-endian length][raw Yjs bytes]
+    // so the inksubserver can deserialize it correctly on next room open.
+    const framed = Buffer.alloc(4 + incomingBuffer.length);
+    framed.writeUInt32BE(incomingBuffer.length, 0);
+    incomingBuffer.copy(framed, 4);
+    board.yjsUpdate = framed;
+    await board.save();
+
+    return res.status(HTTPStatusCodes.OK).json({ ok: true });
+  } catch (err) {
+    console.error('Error saving Yjs state from browser:', err);
+    return res.status(HTTPStatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Server error saving Yjs state' });
+  }
+};
+
 // GET /api/boards/yjs/:sessionId
 // INTERNAL (inksubserver only): returns the stored binary Yjs state for a board
 export const getYjsState = async (req: Request, res: Response) => {
@@ -208,19 +248,10 @@ export const saveYjsState = async (req: Request, res: Response) => {
     const combinedBuffer = Buffer.concat([existingUpdate, incomingBuffer]);
 
     board.yjsUpdate = combinedBuffer;
-    
-    // Optional: Only push to revisions on "Last Leave" to save DB space, 
-    // or keep it here for granular history.
-    board.revisions.push({ 
-      yjsUpdate: incomingBuffer, 
-      userId: board.owner, 
-      savedAt: new Date() 
-    });
 
     await board.save();
-    
-    console.log(`[api] Appended ${incomingBuffer.length} bytes to room ${sessionId}`);
-    return res.status(200).json({ ok: true });
+
+    console.log(`[api] Appended ${incomingBuffer.length} bytes to room ${sessionId}`);    return res.status(200).json({ ok: true });
   } catch (err) {
     console.error('Error saving Yjs state:', err);
     return res.status(500).json({ error: 'Server error' });

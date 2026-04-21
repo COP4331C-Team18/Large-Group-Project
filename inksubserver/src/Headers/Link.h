@@ -4,13 +4,13 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
-#include <mutex>
 #include <atomic>
 
 struct PerSocketData {
     std::string sessionId;  // room this socket belongs to (empty = no room)
     std::string userId;     // opaque user id ("anon_xxxx" for guests)
     std::string username;   // display name shown on remote cursors
+    std::string connectionId; // unique internal ID for this connection
 };
 
 // --- Connection ---
@@ -25,6 +25,7 @@ struct RoomState {
     std::vector<uWS::WebSocket<SSL, true, PerSocketData>*> members;  // live peers
     std::vector<std::string> updateBuffer;  
     size_t currentBufferSize = 0;                               // accumulated Yjs binary frames
+    bool isUploading = false;                                   // protects against concurrent uploads
 };
 
 // --- HTTP config passed from main ---
@@ -50,19 +51,19 @@ public:
 private:
     std::unordered_map<WSSocket*, Connection> connections_;
     std::unordered_map<std::string, RoomState<SSL>> rooms_;
-    mutable std::mutex mutex_;
     NodeApiConfig apiConfig_;
     std::atomic<uint64_t> idCounter_{0};
     static constexpr size_t MAX_BUFFER_SIZE_BYTES = 512 * 1024; // 512 KB
 
     std::string generateId();
 
-    // Room helpers — called while mutex_ is held
+    // Room helpers — called on event loop thread
     void broadcastToRoom(const std::string& sessionId, const std::string& message, WSSocket* exclude = nullptr);
     void broadcastBinaryToRoom(const std::string& sessionId, std::string_view data, WSSocket* exclude = nullptr);
     void removeFromRoom(WSSocket* ws);
+    void flushRoomBuffer(const std::string& sessionId);
 
-    // HTTP helpers — run on background threads, must not hold mutex_
+    // HTTP helpers — run on background threads
     void persistRoomState(const std::string& sessionId, std::vector<std::string> buffer);
     std::string fetchRoomState(const std::string& sessionId, long& httpCodeOut);
     void closeJoinCode(const std::string& sessionId);

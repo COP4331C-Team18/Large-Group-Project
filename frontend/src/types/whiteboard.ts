@@ -1,4 +1,4 @@
-export type Tool = 'pan' | 'pen' | 'eraser' | 'line' | 'rect' | 'circle';
+export type Tool = 'pan' | 'pen' | 'text' | 'eraser' | 'line' | 'rect' | 'circle';
 
 /** All coordinates in WORLD space (invariant to pan/zoom) */
 export interface Stroke {
