@@ -4,6 +4,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import * as Y from 'yjs';
+import { createYjsConnection } from '@/utils/yjsSocketAdapter';
 
 // Internal Components
 import WhiteboardHeader from '../components/whiteboard/WhiteboardHeader';
@@ -1344,10 +1345,11 @@ export default function Whiteboard() {
     // For owners, the code is persisted by handleCollab before this is called.
     // For guests, this is a protected endpoint they cannot call (would return 401).
 
-    const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:9001';
-    const ws = new WebSocket(WS_URL);
+    // Use socket.io fallback if VITE_USE_SOCKETIO is true, otherwise use WebSocket
+    const ws = createYjsConnection({
+      useSocketIO: import.meta.env.VITE_USE_SOCKETIO === 'true',
+    });
     wsRef.current = ws;
-    ws.binaryType = 'arraybuffer';
 
     ws.onopen = () => {
       const userId   = user?.id       ?? anonIdRef.current;
