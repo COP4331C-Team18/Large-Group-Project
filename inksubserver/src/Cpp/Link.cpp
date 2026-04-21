@@ -73,6 +73,8 @@ void LinkManager<SSL>::persistRoomState(const std::string& sessionId,
 
     struct curl_slist* headers = nullptr;
     headers = curl_slist_append(headers, "Content-Type: application/octet-stream");
+    // Add Connection: keep-alive to encourage pooling where supported
+    headers = curl_slist_append(headers, "Connection: keep-alive");
     std::string secretHeader = "x-internal-secret: " + apiConfig_.internalSecret;
     headers = curl_slist_append(headers, secretHeader.c_str());
 
@@ -133,9 +135,7 @@ std::string LinkManager<SSL>::fetchRoomState(const std::string& sessionId, long&
         std::cerr << "[http] fetch failed: " << curl_easy_strerror(res) << "\n";
         return {};
     }
-    // 204 = board exists but no Yjs data yet (valid, new room)
     if (httpCodeOut == 204) return {};
-    // 404 = no board with this joinCode in MongoDB (caller handles rejection)
     if (httpCodeOut == 404) return {};
 
     if (httpCodeOut != 200) {
@@ -198,11 +198,12 @@ std::string LinkManager<SSL>::generateId() {
 
 template<bool SSL>
 void LinkManager<SSL>::onConnect(WSSocket* ws, std::string_view ip) {
-    std::lock_guard<std::mutex> lock(mutex_);
-
     Connection conn;
     conn.id = generateId();
     conn.ip = std::string(ip);
+
+    auto* data = static_cast<PerSocketData*>(ws->getUserData());
+    data->connectionId = conn.id;
 
     connections_[ws] = conn;
 
@@ -216,8 +217,6 @@ void LinkManager<SSL>::onConnect(WSSocket* ws, std::string_view ip) {
 
 template<bool SSL>
 void LinkManager<SSL>::onDisconnect(WSSocket* ws, int code, std::string_view /*message*/) {
-    std::lock_guard<std::mutex> lock(mutex_);
-
     removeFromRoom(ws);
 
     auto it = connections_.find(ws);
@@ -230,12 +229,52 @@ void LinkManager<SSL>::onDisconnect(WSSocket* ws, int code, std::string_view /*m
     }
 }
 
+// ── flushRoomBuffer ───────────────────────────────────────────────────────────
+
+template<bool SSL>
+void LinkManager<SSL>::flushRoomBuffer(const std::string& sessionId) {
+    auto it = rooms_.find(sessionId);
+    if (it == rooms_.end()) return;
+
+    auto& room = it->second;
+    
+    // If we're already uploading, do nothing. We'll be called again when it finishes.
+    if (room.isUploading) return;
+    
+    // If we have data to push
+    if (!room.updateBuffer.empty()) {
+        std::vector<std::string> bufferToPersist = std::move(room.updateBuffer);
+        room.updateBuffer.clear();
+        room.currentBufferSize = 0;
+        room.isUploading = true;
+
+        std::string sid = sessionId;
+        auto* loop = uWS::Loop::get();
+        
+        std::thread([this, sid, buf = std::move(bufferToPersist), loop]() mutable {
+            persistRoomState(sid, std::move(buf));
+            
+            // Schedule the callback on the main thread to clear the uploading flag
+            // and trigger another flush if more data accumulated during the upload.
+            loop->defer([this, sid]() {
+                auto it2 = rooms_.find(sid);
+                if (it2 != rooms_.end()) {
+                    it2->second.isUploading = false;
+                    if (!it2->second.updateBuffer.empty()) {
+                        flushRoomBuffer(sid);
+                    }
+                }
+            });
+        }).detach();
+
+        std::cout << "[room] Flush triggered for " << sid << ". Flushed to API.\n";
+    }
+}
+
 // ── onMessage ─────────────────────────────────────────────────────────────────
 
 template<bool SSL>
 void LinkManager<SSL>::onMessage(WSSocket* ws, std::string_view message, uWS::OpCode opCode) {
-    std::lock_guard<std::mutex> lock(mutex_);
-
     if (connections_.find(ws) == connections_.end()) return;
 
     // --- Binary: Yjs update relay + buffer ---
@@ -251,21 +290,7 @@ void LinkManager<SSL>::onMessage(WSSocket* ws, std::string_view message, uWS::Op
 
                 // 2. Check the "High-Water Mark" (512 KB)
                 if (it->second.currentBufferSize >= MAX_BUFFER_SIZE_BYTES) {
-                
-                // Extract the buffer and reset the room's tracker
-                std::vector<std::string> bufferToPersist = std::move(it->second.updateBuffer);
-                it->second.updateBuffer.clear();
-                it->second.currentBufferSize = 0; 
-
-                std::string sid = data->sessionId;
-                
-                // Offload the HTTP POST to a background thread
-                std::thread([this, sid, buf = std::move(bufferToPersist)]() mutable {
-                    persistRoomState(sid, std::move(buf));
-                }).detach();
-
-                std::cout << "[room] Threshold reached (" << MAX_BUFFER_SIZE_BYTES << " bytes) for " 
-                          << sid << ". Flushed to API.\n";
+                    flushRoomBuffer(data->sessionId);
                 }
 
                 // 3. Relay to others
@@ -273,7 +298,7 @@ void LinkManager<SSL>::onMessage(WSSocket* ws, std::string_view message, uWS::Op
             }
         }
         return;
-}
+    }
 
     // --- Text: JSON protocol ---
     json msg;
@@ -320,23 +345,27 @@ void LinkManager<SSL>::onMessage(WSSocket* ws, std::string_view message, uWS::Op
         // and send it to them via a background thread (avoids blocking the event loop).
         if (isFirstMember && !apiConfig_.url.empty()) {
             auto* loop = uWS::Loop::get();
-            std::thread([this, sessionId, ws, loop]() {
+            std::thread([this, sessionId, ws, connId, loop]() {
                 long httpCode = 0;
                 std::string blob = fetchRoomState(sessionId, httpCode);
 
                 // 404 = no board with this joinCode in MongoDB — reject the room
                 if (httpCode == 404) {
                     std::cerr << "[room] rejected unknown room: " << sessionId << "\n";
-                    loop->defer([this, sessionId, ws]() {
-                        std::lock_guard<std::mutex> lk(mutex_);
-                        // Kick the socket
-                        if (connections_.find(ws) != connections_.end()) {
+                    loop->defer([this, sessionId, ws, connId]() {
+                        // Check if socket is still active AND belongs to the original connection
+                        auto it = connections_.find(ws);
+                        if (it != connections_.end() && it->second.id == connId) {
                             ws->send(R"({"type":"error","message":"invalid room code"})",
                                      uWS::OpCode::TEXT);
                             ws->close();
                         }
-                        // Remove the room entirely so it leaves no trace in memory
-                        rooms_.erase(sessionId);
+                        
+                        // Carefully erase room if it's still empty
+                        auto roomIt = rooms_.find(sessionId);
+                        if (roomIt != rooms_.end() && roomIt->second.members.empty()) {
+                            rooms_.erase(sessionId);
+                        }
                     });
                     return;
                 }
@@ -348,13 +377,15 @@ void LinkManager<SSL>::onMessage(WSSocket* ws, std::string_view message, uWS::Op
                 if (updates.empty()) return;
 
                 // Deliver each stored update to the joining client on the event loop thread
-                loop->defer([this, sessionId, ws, updates = std::move(updates)]() {
-                    std::lock_guard<std::mutex> lk(mutex_);
-                    // Verify ws is still connected and still in this room
-                    if (connections_.find(ws) == connections_.end()) return;
-                    auto it = rooms_.find(sessionId);
-                    if (it == rooms_.end()) return;
-                    auto& members = it->second.members;
+                loop->defer([this, sessionId, ws, connId, updates = std::move(updates)]() {
+                    // Check if socket is still active AND belongs to the original connection
+                    auto it = connections_.find(ws);
+                    if (it == connections_.end() || it->second.id != connId) return;
+
+                    auto roomIt = rooms_.find(sessionId);
+                    if (roomIt == rooms_.end()) return;
+                    
+                    auto& members = roomIt->second.members;
                     if (std::find(members.begin(), members.end(), ws) == members.end()) return;
 
                     for (const auto& u : updates) {
@@ -430,39 +461,50 @@ void LinkManager<SSL>::removeFromRoom(WSSocket* ws) {
     members.erase(std::remove(members.begin(), members.end(), ws), members.end());
 
     if (members.empty()) {
-        // Last user left — persist accumulated Yjs state to Node API then destroy room
-        if (!it->second.updateBuffer.empty()) {
-            std::vector<std::string> buffer = std::move(it->second.updateBuffer);
-            std::string sid = sessionId; // copy for thread
-            std::string url = apiConfig_.url;
-            std::string secret = apiConfig_.internalSecret;
-            NodeApiConfig cfg = apiConfig_;
-            std::thread([this, sid, buffer = std::move(buffer)]() mutable {
-                persistRoomState(sid, std::move(buffer));
-            }).detach();
-        }
-        rooms_.erase(it);
-        std::cout << "[room] Room " << sessionId << " destroyed (empty)\n";
-
-        // Start a 5-minute offline timer
+        // Last user left — trigger a final flush of whatever is left.
+        flushRoomBuffer(sessionId);
+        
+        std::cout << "[room] Room " << sessionId << " empty. Starting 5-minute timer.\n";
+        
         std::string sid = sessionId;
-        std::thread([this, sid]() {
-            std::this_thread::sleep_for(std::chrono::minutes(0));
+        auto* loop = uWS::Loop::get();
+        
+        std::thread([this, sid, loop]() {
+            std::this_thread::sleep_for(std::chrono::minutes(5));
             
-            bool isActive = false;
-            {
-                std::lock_guard<std::mutex> lk(mutex_);
-                if (rooms_.find(sid) != rooms_.end()) {
-                    isActive = true;
-                }
-            }
-            if (!isActive) {
-                closeJoinCode(sid);
-            } else {
-                std::cout << "[room] Timer finished, but room " << sid << " is active again. Not closing.\n";
-            }
-        }).detach();
+            loop->defer([this, sid]() {
+                auto it2 = rooms_.find(sid);
+                if (it2 != rooms_.end() && it2->second.members.empty()) {
+                    // Still empty after 5 minutes.
+                    std::cout << "[room] Room " << sid << " idle for 5 minutes. Destroying.\n";
+                    
+                    // Final safety flush in case something was stuck without triggering isUploading
+                    if (!it2->second.updateBuffer.empty() && !it2->second.isUploading) {
+                        std::vector<std::string> buffer = std::move(it2->second.updateBuffer);
+                        std::thread([this, sid, buffer = std::move(buffer)]() mutable {
+                            persistRoomState(sid, std::move(buffer));
+                            closeJoinCode(sid);
+                        }).detach();
+                    } else if (it2->second.isUploading) {
+                        // If it's currently uploading the last bit, we must wait for it to finish
+                        // before closing. The easiest way is to let the upload finish in the background, 
+                        // and just send the close request with a slight delay.
+                        std::thread([this, sid]() {
+                            std::this_thread::sleep_for(std::chrono::seconds(2));
+                            closeJoinCode(sid);
+                        }).detach();
+                    } else {
+                        std::thread([this, sid]() {
+                            closeJoinCode(sid);
+                        }).detach();
+                    }
 
+                    rooms_.erase(sid);
+                } else if (it2 != rooms_.end()) {
+                    std::cout << "[room] Timer finished, but room " << sid << " is active again. Not closing.\n";
+                }
+            });
+        }).detach();
     } else {
         json countMsg = {{"type", "userCount"}, {"count", members.size()}};
         broadcastToRoom(sessionId, countMsg.dump());
@@ -474,7 +516,6 @@ void LinkManager<SSL>::removeFromRoom(WSSocket* ws) {
 
 template<bool SSL>
 size_t LinkManager<SSL>::connectionCount() const {
-    std::lock_guard<std::mutex> lock(mutex_);
     return connections_.size();
 }
 

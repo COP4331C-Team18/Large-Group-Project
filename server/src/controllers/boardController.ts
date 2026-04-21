@@ -244,19 +244,10 @@ export const saveYjsState = async (req: Request, res: Response) => {
     const combinedBuffer = Buffer.concat([existingUpdate, incomingBuffer]);
 
     board.yjsUpdate = combinedBuffer;
-    
-    // Optional: Only push to revisions on "Last Leave" to save DB space, 
-    // or keep it here for granular history.
-    board.revisions.push({ 
-      yjsUpdate: incomingBuffer, 
-      userId: board.owner, 
-      savedAt: new Date() 
-    });
 
     await board.save();
-    
-    console.log(`[api] Appended ${incomingBuffer.length} bytes to room ${sessionId}`);
-    return res.status(200).json({ ok: true });
+
+    console.log(`[api] Appended ${incomingBuffer.length} bytes to room ${sessionId}`);    return res.status(200).json({ ok: true });
   } catch (err) {
     console.error('Error saving Yjs state:', err);
     return res.status(500).json({ error: 'Server error' });

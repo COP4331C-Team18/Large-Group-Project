@@ -1368,11 +1368,6 @@ export default function Whiteboard() {
           const state = Y.encodeStateAsUpdate(ydocRef.current);
           ws.send(state.buffer.slice(state.byteOffset, state.byteOffset + state.byteLength) as ArrayBuffer);
         } else if (msg.type === 'userCount') {
-          // Re-broadcast full state whenever a new peer joins so they hydrate
-          if (msg.count > 1 && ws.readyState === WebSocket.OPEN) {
-            const state = Y.encodeStateAsUpdate(ydocRef.current);
-            ws.send(state.buffer.slice(state.byteOffset, state.byteOffset + state.byteLength) as ArrayBuffer);
-          }
           setUserCount(msg.count);
         } else if (msg.type === 'cursor') {
           remoteCursorsRef.current.set(msg.userId, {
@@ -1435,12 +1430,16 @@ export default function Whiteboard() {
     };
 
     const onUpdate = (update: Uint8Array, origin: any) => {
-      if (origin !== 'remote' && wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(update.buffer.slice(update.byteOffset, update.byteOffset + update.byteLength) as ArrayBuffer);
+      if (origin !== 'remote') {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(update.buffer.slice(update.byteOffset, update.byteOffset + update.byteLength) as ArrayBuffer);
+        } else {
+          scheduleSave();
+        }
       }
-      if (origin !== 'remote') scheduleSave();
     };
     const flushSave = () => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) return;
       if (saveTimer) {
         clearTimeout(saveTimer);
         saveTimer = null;
@@ -1451,6 +1450,7 @@ export default function Whiteboard() {
 
     // keepalive survives page reload/close; axios requests are cancelled on unload
     const flushSaveOnUnload = () => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) return;
       if (saveTimer) {
         clearTimeout(saveTimer);
         saveTimer = null;

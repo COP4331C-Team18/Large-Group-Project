@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 #include <nlohmann/json.hpp>
+#include <curl/curl.h>
 #include "Link.h"
 
 using json = nlohmann::json;
@@ -23,6 +24,7 @@ json loadConfig(const std::string& path) {
 }
 
 int main() {
+    curl_global_init(CURL_GLOBAL_ALL);
     json config = loadConfig("config/config.json");
     int port = config["server"]["port"];
     unsigned short idleTimeout = static_cast<unsigned short>((int)config["server"]["idle_timeout"]);

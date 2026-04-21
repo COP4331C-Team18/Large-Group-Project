@@ -27,6 +27,7 @@ const RoomSection = () => {
     if (code.length !== maxLength) return;
     setError('');
     try {
+      console.log("joinboardbycode sent");
       const response = await boardService.joinBoardByCode(code);
 
       if (response) {
