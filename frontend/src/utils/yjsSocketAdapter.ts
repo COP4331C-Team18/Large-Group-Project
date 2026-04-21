@@ -114,33 +114,37 @@ export class YjsSocketAdapter {
           });
           if (this.onmessage) this.onmessage(messageEvent);
         } else if (event === 'replay_updates' || event === 'yjs_update') {
-          // Binary message - Yjs update
-          const payload = args[0];
-          let arrayBuffer: ArrayBuffer;
+  // Binary message - Yjs update
+  const payload = args[0];
+  let arrayBuffer: ArrayBuffer;
 
-          if (payload instanceof ArrayBuffer) {
-            arrayBuffer = payload;
-          } else if (ArrayBuffer.isView(payload)) {
-            arrayBuffer = payload.buffer.slice(
-              payload.byteOffset,
-              payload.byteOffset + payload.byteLength,
-            );
-          } else if (typeof Blob !== 'undefined' && payload instanceof Blob) {
-            payload.arrayBuffer().then((buffer) => {
-              if (this.onmessage) {
-                this.onmessage(new MessageEvent('message', { data: buffer }));
-              }
-            });
-            return;
-          } else {
-            arrayBuffer = new Uint8Array(payload ?? []).buffer;
-          }
+  if (payload instanceof ArrayBuffer) {
+    arrayBuffer = payload;
+  } else if (ArrayBuffer.isView(payload)) {
+    // FIX: force-convert to guaranteed ArrayBuffer
+    arrayBuffer = new Uint8Array(
+  payload.buffer,
+  payload.byteOffset,
+  payload.byteLength
+).slice().buffer;
 
-          const messageEvent = new MessageEvent('message', {
-            data: arrayBuffer,
-          });
-          if (this.onmessage) this.onmessage(messageEvent);
-        }
+  } else if (typeof Blob !== 'undefined' && payload instanceof Blob) {
+    payload.arrayBuffer().then((buffer) => {
+      if (this.onmessage) {
+        this.onmessage(new MessageEvent('message', { data: buffer }));
+      }
+    });
+    return;
+  } else {
+    arrayBuffer = new Uint8Array(payload ?? []).buffer;
+  }
+
+  const messageEvent = new MessageEvent('message', {
+    data: arrayBuffer,
+  });
+  if (this.onmessage) this.onmessage(messageEvent);
+}
+
       });
     } catch (err) {
       console.error('[YjsSocketAdapter] Socket.io initialization failed:', err);
@@ -150,34 +154,52 @@ export class YjsSocketAdapter {
   }
 
   send(data: string | ArrayBufferLike): void {
-    if (this.mode === 'websocket') {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(data);
-      }
-    } else {
-      // Socket.io mode
-      if (!this.socket || !this.socket.connected) {
-        console.warn('[YjsSocketAdapter] Socket not connected');
-        return;
-      }
+  if (this.mode === 'websocket') {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
 
       if (typeof data === 'string') {
-        // Text message - parse and emit as specific event
-        try {
-          const msg = JSON.parse(data);
-          const { type, ...payload } = msg;
-          if (type) {
-            this.socket.emit(type, payload);
-          }
-        } catch (err) {
-          console.error('[YjsSocketAdapter] Failed to parse message:', err);
-        }
+        this.ws.send(data);
+      } else if (data instanceof ArrayBuffer) {
+        this.ws.send(data);
+      } else if (ArrayBuffer.isView(data)) {
+        // FIX: convert to guaranteed ArrayBuffer
+        const buf = new Uint8Array(
+          data.buffer,
+          data.byteOffset,
+          data.byteLength
+        ).slice().buffer;
+        this.ws.send(buf);
       } else {
-        // Binary message - Yjs update
-        this.socket.emit('yjs_update', data);
+        // fallback for SharedArrayBuffer or unknown binary
+        const buf = new Uint8Array(data as any).buffer;
+        this.ws.send(buf);
       }
+
+    }
+  } else {
+    // Socket.io mode
+    if (!this.socket || !this.socket.connected) {
+      console.warn('[YjsSocketAdapter] Socket not connected');
+      return;
+    }
+
+    if (typeof data === 'string') {
+      try {
+        const msg = JSON.parse(data);
+        const { type, ...payload } = msg;
+        if (type) {
+          this.socket.emit(type, payload);
+        }
+      } catch (err) {
+        console.error('[YjsSocketAdapter] Failed to parse message:', err);
+      }
+    } else {
+      // Binary message - Yjs update
+      this.socket.emit('yjs_update', data);
     }
   }
+}
+
 
   close(): void {
     if (this.mode === 'websocket' && this.ws) {

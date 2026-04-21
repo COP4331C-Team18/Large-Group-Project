@@ -4,7 +4,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import * as Y from 'yjs';
-import { createYjsConnection } from '@/utils/yjsSocketAdapter';
+import { createYjsConnection , YjsSocketAdapter} from '@/utils/yjsSocketAdapter';
 
 // Internal Components
 import WhiteboardHeader from '../components/whiteboard/WhiteboardHeader';
@@ -104,7 +104,8 @@ export default function Whiteboard() {
   const activeStrokeId = useRef<string | null>(null);
 
   // WebSocket ref for collab
-  const wsRef = useRef<WebSocket | null>(null);
+  type CollabSocket = WebSocket | YjsSocketAdapter;
+  const wsRef = useRef<CollabSocket | null>(null);
   // Reconnect state — ref so closure in onclose always sees latest joinCode
   const joinCodeRef = useRef<string | undefined>(undefined);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
