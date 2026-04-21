@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import LoginHero from './LoginHero';
 import OAuth from '@/components/signup/OAuth';
 import { useAuth } from '@/contexts/AuthContext';
 import { authService } from '@/api/services/authService';
