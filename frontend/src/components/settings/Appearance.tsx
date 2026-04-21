@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { THEMES, getSavedTheme, applyTheme, saveThemeCookie } from '@/config/theme';
 import type { ThemeId } from '@/config/theme';
 import ThemeCard from '@/components/settings/ThemeCard';
 import Navbar from '@/components/profile/ProfileNavbar';
 
 const SettingsPage: React.FC = () => {
+  const navigate = useNavigate();
   const [savedTheme,  setSavedTheme]  = useState<ThemeId>(getSavedTheme);
   const [activeTheme, setActiveTheme] = useState<ThemeId>(getSavedTheme);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [hasSaved,    setHasSaved]    = useState(false);
 
   useEffect(() => {
     applyTheme(activeTheme);
@@ -19,12 +22,19 @@ const SettingsPage: React.FC = () => {
     saveThemeCookie(activeTheme);
     setSavedTheme(activeTheme);
     setSaveSuccess(true);
+    setHasSaved(true);
     setTimeout(() => setSaveSuccess(false), 2000);
+  };
+
+  const handleThemeSelect = (id: ThemeId) => {
+    setActiveTheme(id);
+    if (id !== savedTheme) setHasSaved(false);
   };
 
   const handleCancel = () => {
     applyTheme(savedTheme);
     setActiveTheme(savedTheme);
+    navigate(-1);
   };
 
   return (
@@ -48,7 +58,7 @@ const SettingsPage: React.FC = () => {
                 key={theme.id}
                 theme={theme}
                 selected={activeTheme === theme.id}
-                onSelect={setActiveTheme}
+                onSelect={handleThemeSelect}
               />
             ))}
           </div>
@@ -69,7 +79,7 @@ const SettingsPage: React.FC = () => {
 
             <div className="flex gap-2 w-full sm:w-auto sm:ml-auto">
               <button type="button" onClick={handleCancel} className="btn btn-ghost flex-1 sm:flex-none">
-                {saveSuccess ? 'Go Back' : 'Cancel'}
+                {hasSaved ? 'Go Back' : 'Cancel'}
               </button>
               <button type="button" onClick={handleSave} disabled={!hasChanges} className="btn btn-primary flex-1 sm:flex-none">
                 Save Changes
